@@ -1,0 +1,5 @@
+old_experiments
+*.pickle
+models
+*.png
+*__pycache__*
