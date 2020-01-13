@@ -18,6 +18,7 @@ tensorflow-probability = "*"
 atari-py = "*"
 matplotlib = "*"
 seaborn = "*"
+jax = "*"
 
 [requires]
 python_version = "3.7"
