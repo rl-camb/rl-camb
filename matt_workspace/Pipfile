@@ -19,6 +19,7 @@ atari-py = "*"
 matplotlib = "*"
 seaborn = "*"
 jax = "*"
+jupyterlab = "*"
 
 [requires]
 python_version = "3.7"
