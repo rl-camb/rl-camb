@@ -10,7 +10,7 @@ jupyter = "*"
 pillow = "*"
 opencv-python = "*"
 opencv-contrib-python = "*"
-edgetpu = {path = "./../../edgetpu/dist/edgetpu-2.12.2-py3-none-any.whl"}
+edgetpu = {path = "./../../edgetpu/dist/edgetpu-2.13.0-py3-none-any.whl"}
 netron = "*"
 ipython = "*"
 gym = "*"
