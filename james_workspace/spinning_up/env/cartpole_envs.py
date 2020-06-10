@@ -61,18 +61,20 @@ class CartPoleStandUp(CustomCartPole):
         """
         return reward if not done else -reward
 
-    def check_solved_on_done(self, state, episodes, scores, verbose=False):
+    def check_solved_on_done(self, state, scores, verbose=False):
         """The task is solved if the average score over the last self.episodes_threshold 
         episodes averaged to be over the score threshold.
         """
-        if len(episodes) < self.episodes_threshold:
-            up_to = len(episodes)
+        solved = False
+        if len(scores) < self.episodes_threshold:
+            up_to = len(scores)
         else:
             up_to = self.episodes_threshold
+        
         score = np.mean(scores[-up_to:])
-        if verbose:
-            print(" - steps ", scores[-1], " - score", int(score), "/", self.score_target)
-        if (len(episodes) >= self.episodes_threshold 
+        
+        if (len(scores) >= self.episodes_threshold 
             and score > self.score_target):
-                return True
-        return False
+                solved = True
+        
+        return solved, score

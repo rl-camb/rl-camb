@@ -1,4 +1,4 @@
-import os, random
+import os, random, itertools, sys
 
 import numpy as np
 import tensorflow as tf
@@ -73,58 +73,53 @@ class DQNSolver(StandardAgent):
         Inheriting environments should implement this.
         Uses overridden functions to customise the behaviour.
         """
-        
-        # Keep track of scores for each episode
-        episodes, scores = [], []
         env = env_wrapper.env
         
         for episode in range(max_episodes):
-            
-            # Initialise the environment state
-            done, step = False, 0
+            done = False
+            # rewards = []
             state = np.reshape(env.reset(),
                                (1, env_wrapper.observation_space))
-            if verbose:
+            if episode % 25 == 0:
                 print("episode", episode, end="")
-            
             # Take steps until failure / win
-            while not done:
-
+            for step in itertools.count():
                 if render:
-                    env.render() # for viewing
-                
-                # Find the action the agent thinks we should take
-                action = self.act(state)
+                    env.render()
 
-                # Take the action, make observations
+                action = self.act(state)
                 observation, reward, done, info = env.step(action)
-                
-                # Diagnose your reward function!
-                # print("state", state[0,0], "done", done, "thresh", self.env.x_threshold, "angle %.2f" % (state[0,2] * 180 / math.pi))
                 
                 state_next = np.reshape(observation, (1, env_wrapper.observation_space))
 
                 # Calculate a custom reward - inherit from custom environment
                 reward = env_wrapper.reward_on_step(state, state_next, reward, done)
-                
-                # Save the action into the DQN memory
+                # rewards.append(reward)
                 self.memory.append((state, action, reward, state_next, done))
                 state = state_next
-                step += 1
+                print("\rEpisode {}, Step {} ({}): {}".format(
+                          episode, step, self.total_t + 1, int(reward)),
+                      end="")
+                sys.stdout.flush()
 
-            episodes.append(episode) # a little redundant combined with scores..
+                self.total_t += 1
+                if done:
+                    break
 
             # Calculate a custom score for this episode
-            score = env_wrapper.get_score(state, state_next, reward, step)
-            self.scores.append(score)
-
-            if env_wrapper.check_solved_on_done(state, episodes, self.scores, verbose=verbose):
-                return True, episodes, scores
-
+            # score = env_wrapper.get_score(state, state_next, reward, step) # TODO change to rewards not reward
+            self.scores.append(step) # Specific to cartpole
             self.learn()
-            self.save_model()
+
+            solved, overall_score = env_wrapper.check_solved_on_done(state, self.scores, verbose=verbose)
+            if episode % 25 == 0:
+                print(f"\rEpisode {episode}/{max_episodes} - steps {step} - "
+                      f"score {int(overall_score)}/{env_wrapper.score_target}")
+                self.save_model()
+            if solved:
+                return True
         
-        return False, episodes, scores
+        return False
     
     def act(self, state):
         """Take a random action or the most valuable predicted
@@ -146,18 +141,16 @@ class DQNSolver(StandardAgent):
         """
         x_batch, y_batch = [], []
 
+        # TODO change to slice and choice to stop copying the batch
         minibatch = random.sample(self.memory, 
                                   min(len(self.memory), 
                                       self.batch_size))
+        # TODO make processing fast
         # Process the mini batch
         for state, action, reward, next_state, done in minibatch:
             
             # Get the value of the action you will not take
             y_target = self.model.predict(state)
-
-            # Set the value (or label) for each action action as
-            # the predicted value based on the discount rate and 
-            # next predicted reward.
             y_target[0][action] = reward if done else reward + self.gamma * \
                          np.amax(self.model.predict(next_state))
             
@@ -170,7 +163,7 @@ class DQNSolver(StandardAgent):
                        batch_size=len(x_batch), 
                        verbose=0, 
                        epochs=1)
-        
+
         # Reduce the exploration rate
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay

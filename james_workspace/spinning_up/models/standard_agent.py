@@ -18,8 +18,10 @@ class StandardAgent():
 
         if not self.model_dict:
             self.scores = []
+            self.total_t = 0
         else:
             self.scores = self.model_dict["scores"]
+            self.total_t = self.model_dict["total_t"]
 
     def save_dict(self):
         if os.path.exists(self.model_dict_file):
@@ -29,7 +31,7 @@ class StandardAgent():
             model_dict = {"model_location": self.model_location}
 
         # Update values
-        for key in ("scores",):
+        for key in ("scores", "total_t"):
             if hasattr(self, key):
                 model_dict[key] = getattr(self, key)
 
@@ -46,7 +48,9 @@ class StandardAgent():
             self.model_dict = pickled_details
         else:
             print("No model dict exists yet!")
-            self.model_dict = {"scores": []}
+            self.model_dict = {"scores": [],
+                               "trained_episodes": 0,
+                               "total_t": 0,}
 
     def view_models_dict(self):
         """Open the model dict to view what models we have."""

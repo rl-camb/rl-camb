@@ -1,6 +1,9 @@
 from env import CartPoleStandUp
 from models import DQNSolver
+from utils.plotting import plot_scores
 import gym, time, random, math, pickle, os, sys, copy, argparse
+
+from utils import smooth_over
 
 class MyParser(argparse.ArgumentParser):
     
@@ -32,14 +35,19 @@ def parse_args():
                         help="Shows an example gif of the environment"
                              "with random actions")
 
-    # parser.add_argument("--plot", action="store_true", 
-    #                     help="Whether to plot the experiment output")
-    # 
+    parser.add_argument("--plot", action="store_true", 
+                        help="Whether to plot the experiment output")
+
     # parser.add_argument("--model", type=str, default="default",
     #                     help="The model to be run. Options: "
     #                          "side_camp_dqn, (default)")
 
     return parser.parse_args()
+
+
+# TODO clean up the DQN learning processing
+# TODO fix up a virtual env to remove the tensorflow errors (start one from scratch, as with gridworlds)
+
 
 if __name__ == "__main__":
 
@@ -57,7 +65,13 @@ if __name__ == "__main__":
         agent.do_random_runs(cart, episodes=1, steps=99, verbose=True)
     
     if args.train:
-        agent.solve(cart, max_episodes=args.train, verbose=True, render=True)
+        solved = agent.solve(cart, max_episodes=args.train, verbose=True, render=True)
     
     if args.show:
         agent.show_example(cart, steps=99)
+
+    if args.plot:
+        plot_scores(agent.experiment_dir + "scores.png", agent.scores)
+        smoothed_scores = smooth_over(agent.scores, 10)
+        plot_scores(agent.experiment_dir + "smooth_scores.png", smoothed_scores)
+
