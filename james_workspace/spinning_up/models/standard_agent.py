@@ -6,13 +6,15 @@ class StandardAgent():
 
     def __init__(self, experiment_dir):
 
-        self.experiment_dir = "saved_models/" + experiment_dir
+        self.experiment_dir = "saved_models/" + experiment_dir + "/"
         os.makedirs(self.experiment_dir, exist_ok=True)
         self.model_location = self.experiment_dir + "model.h5"
         self.model_dict_file = os.path.join(
             self.experiment_dir, "model_dict.pickle")
 
         self.load_model()
+        print("Loaded model:")
+        self.view_models_dict()
 
         if not self.model_dict:
             self.scores = []
@@ -26,13 +28,17 @@ class StandardAgent():
         else:
             model_dict = {"model_location": self.model_location}
 
+        # Update values
         for key in ("scores",):
             if hasattr(self, key):
                 model_dict[key] = getattr(self, key)
 
+        if hasattr(self, "scores"):
+            model_dict["trained_episodes"] = len(self.scores)
+
         with open(self.model_dict_file, 'wb') as md:
             pickle.dump(model_dict, md)
-    
+
     def load_dict(self):
         if os.path.exists(self.model_dict_file):
             with open(self.model_dict_file, 'rb') as md:
@@ -42,12 +48,15 @@ class StandardAgent():
             print("No model dict exists yet!")
             self.model_dict = {"scores": []}
 
-    def view_models_dict(self, view=False):
+    def view_models_dict(self):
         """Open the model dict to view what models we have."""
-        with open(self.models_dict_file, 'rb') as md:
-            model_dict = pickle.load(md)
+        if os.path.exists(self.model_dict_file):
+            with open(self.model_dict_file, 'rb') as md:
+                model_dict = pickle.load(md)
 
-        if view:
-            pprint.pprint(model_dict)
+            pprint.pprint(model_dict, depth=1)
+        else:
+            print("Model dict file does not exist for viewing, yet")
+            model_dict = {}
 
         return model_dict
