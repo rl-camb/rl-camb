@@ -34,9 +34,13 @@ def parse_args():
     parser.add_argument("--example", action="store_true", 
                         help="Shows an example gif of the environment"
                              "with random actions")
+    
+    parser.add_argument("--render", action="store_true", 
+                        help="Whether to render the env as we go")
 
     parser.add_argument("--plot", action="store_true", 
                         help="Whether to plot the experiment output")
+
 
     # parser.add_argument("--model", type=str, default="default",
     #                     help="The model to be run. Options: "
@@ -65,7 +69,8 @@ if __name__ == "__main__":
         agent.do_random_runs(cart, episodes=1, steps=99, verbose=True)
     
     if args.train:
-        solved = agent.solve(cart, max_episodes=args.train, verbose=True, render=True)
+        solved = agent.solve(cart, max_episodes=args.train, verbose=True, render=args.render)
+        print("\nSolved:", solved)
     
     if args.show:
         agent.show_example(cart, steps=99)

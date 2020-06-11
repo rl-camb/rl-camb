@@ -1,4 +1,4 @@
-import os, random, itertools, sys
+import os, random, itertools, sys, pprint
 
 import numpy as np
 import tensorflow as tf
@@ -9,6 +9,7 @@ from tensorflow.keras.optimizers import Adam
 from collections import deque
 
 from models.standard_agent import StandardAgent
+
 
 class DQNSolver(StandardAgent):
     """A standard dqn_solver.
@@ -29,12 +30,28 @@ class DQNSolver(StandardAgent):
         self.batch_size = 64
 
         self.model_name = "dqn"
-        self.model = DQNModel()
-        self.model.compile(loss='mse', 
-            optimizer=Adam(lr=self.learning_rate, 
-                           decay=self.learning_rate_decay))
-        super(DQNSolver, self).__init__(
-            self.model_name + "_" + experiment_name)
+        self.model = self.build_model()
+
+        self.optimizer = Adam(
+            lr=self.learning_rate, 
+            decay=self.learning_rate_decay)
+
+        super(DQNSolver, self).__init__(experiment_name + "_" + self.model_name)
+
+        self.load_state()
+
+    def build_model(self):
+
+        tf.keras.backend.set_floatx('float64')
+
+        model = tf.keras.Sequential(name=self.model_name)
+        model.add(Dense(24, input_dim=self.state_size, activation='tanh'))
+        model.add(Dense(48, activation='tanh'))
+        model.add(Dense(self.action_size, activation='linear'))
+
+        model.build()
+
+        return model
 
     def show_example(self, env_wrapper, steps):
         """Show a quick view of the environemt, 
@@ -69,36 +86,24 @@ class DQNSolver(StandardAgent):
         env.close()
 
     def solve(self, env_wrapper, max_episodes, verbose=False, render=False):
-        """A generic solve function (only for DQN agents?).
-        Inheriting environments should implement this.
-        Uses overridden functions to customise the behaviour.
-        """
         env = env_wrapper.env
-        
+
         for episode in range(max_episodes):
-            done = False
-            # rewards = []
-            state = np.reshape(env.reset(),
-                               (1, env_wrapper.observation_space))
-            if episode % 25 == 0:
-                print("episode", episode, end="")
+            state = env.reset()
             # Take steps until failure / win
             for step in itertools.count():
                 if render:
                     env.render()
-
-                action = self.act(state)
-                observation, reward, done, info = env.step(action)
-                
-                state_next = np.reshape(observation, (1, env_wrapper.observation_space))
-
-                # Calculate a custom reward - inherit from custom environment
+                action = self.act(state).numpy()
+                observation, reward, done, _ = env.step(action)
+                state_next = observation
+                # Custom reward if required by env wrapper
                 reward = env_wrapper.reward_on_step(state, state_next, reward, done)
-                # rewards.append(reward)
-                self.memory.append((state, action, reward, state_next, done))
-                state = state_next
-                print("\rEpisode {}, Step {} ({}): {}".format(
-                          episode, step, self.total_t + 1, int(reward)),
+                self.memory.append((state, np.int32(action), reward, state_next, done))
+                state = observation
+                
+                print(f"\rEpisode {episode + 1}/{max_episodes} - "
+                      f"steps {step} ({self.total_t + 1})", 
                       end="")
                 sys.stdout.flush()
 
@@ -106,21 +111,25 @@ class DQNSolver(StandardAgent):
                 if done:
                     break
 
-            # Calculate a custom score for this episode
-            # score = env_wrapper.get_score(state, state_next, reward, step) # TODO change to rewards not reward
-            self.scores.append(step) # Specific to cartpole
             self.learn()
+            
+            # Calculate a (optionally custom) score for this episode
+            score = env_wrapper.get_score(state, state_next, reward, step)
+            self.scores.append(score) 
 
             solved, overall_score = env_wrapper.check_solved_on_done(state, self.scores, verbose=verbose)
-            if episode % 25 == 0:
-                print(f"\rEpisode {episode}/{max_episodes} - steps {step} - "
-                      f"score {int(overall_score)}/{env_wrapper.score_target}")
-                self.save_model()
+
+            if episode % 25 == 0 or solved:
+                print(f"\rEpisode {episode + 1}/{max_episodes} - steps {step} - "
+                      f"score {int(overall_score)}/{int(env_wrapper.score_target)}")
+                self.save_state()
+
             if solved:
                 return True
-        
+
         return False
     
+    @tf.function
     def act(self, state):
         """Take a random action or the most valuable predicted
         action, based on the agent's model. 
@@ -130,76 +139,101 @@ class DQNSolver(StandardAgent):
         if np.random.rand() <= self.epsilon:
             return random.randrange(self.action_size)
 
-        act_values = self.model.predict(state)
+        if state.ndim == 1:
+            state = tf.reshape(state, (1, state.shape[0]))
+        act_values = self.model(state)
         
-        return np.argmax(act_values[0]) # returns action
+        return tf.math.argmax(act_values, axis=-1)
     
     def learn(self):
         """Updated the agent's decision network based
         on a sample of previous decisions it has seen.
         Here, we combine the target and action networks.
         """
-        x_batch, y_batch = [], []
 
-        # TODO change to slice and choice to stop copying the batch
-        minibatch = random.sample(self.memory, 
-                                  min(len(self.memory), 
-                                      self.batch_size))
-        # TODO make processing fast
-        # Process the mini batch
-        for state, action, reward, next_state, done in minibatch:
-            
-            # Get the value of the action you will not take
-            y_target = self.model.predict(state)
-            y_target[0][action] = reward if done else reward + self.gamma * \
-                         np.amax(self.model.predict(next_state))
-            
-            x_batch.append(state[0])
-            y_batch.append(y_target[0])
-        
-        # Batched training
-        self.model.fit(np.array(x_batch), 
-                       np.array(y_batch), 
-                       batch_size=len(x_batch), 
-                       verbose=0, 
-                       epochs=1)
+        minibatch = [
+            self.memory[i] for i in np.random.choice(
+                min(self.batch_size, len(self.memory)),
+                self.batch_size)
+            ]
 
-        # Reduce the exploration rate
+        loss_value = self.take_training_step(
+            *tuple(map(np.array, zip(*minibatch)))
+            )
+
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
 
-    def save_model(self):
+    @tf.function
+    def take_training_step(self, sts, a, r, n_sts, d):
+
+        future_q_pred = tf.math.reduce_max(self.model(n_sts), axis=-1)
+        future_q_pred = tf.where(d, tf.zeros((1,), dtype=tf.dtypes.float64), future_q_pred)
+        q_targets = r + self.gamma * future_q_pred
+
+        loss_value, grads = self.squared_diff_loss_at_a(sts, a, q_targets)
+
+        self.optimizer.apply_gradients(zip(grads, self.model.trainable_variables))
+        
+        return loss_value
+
+    @tf.function
+    def squared_diff_loss_at_a(self, states, action_mask, targets_from_memory):
+        """
+        A squared difference loss function 
+        Diffs the Q model's predicted values with 
+        the actual values plus the discounted next state by the target Q network
+        """
+        with tf.GradientTape() as tape:
+            q_predictions = self.model(states)
+            print(q_predictions)
+            
+            gather_indices = tf.range(self.batch_size) * tf.shape(q_predictions)[-1] + action_mask
+            q_predictions_at_a = tf.gather(tf.reshape(q_predictions, [-1]), gather_indices)
+
+            losses = tf.math.squared_difference(q_predictions_at_a, targets_from_memory)
+            reduced_loss = tf.math.reduce_mean(losses)
+
+        return reduced_loss, tape.gradient(reduced_loss, self.model.trainable_variables)
+
+    def save_state(self):
         """Save a (trained) model with its weights to a specified file.
         Metadata should be passed to keep information avaialble.
         """
-        self.model.save_weights(self.model_location)
 
-        super(DQNSolver, self).save_dict()
+        # TODO move optimizer inside of model save
+        add_to_save = {
+            "epsilon": self.epsilon,
+            "memory": self.memory,
+            "optimizer_config": self.optimizer.get_config(),
+            }
 
-    def load_model(self):
+        self.save_state_to_dict(append_dict=add_to_save)
+
+        # custom_obj = {
+        #     'epsilon': self.epsilon,
+        #     'memory': self.memory,
+        #     'optimizer_config': self.optimizer.get_config,
+        # }
+
+        self.model.save(self.model_location) # , custom_objects=custom_obj)
+
+    def load_state(self):
         """Load a model with the specified name"""
-        model_dict = super(DQNSolver, self).load_dict()
-        if model_dict:
-            self.model.load_weights(model_dict["model_location"])
 
+        model_dict = self.load_state_from_dict()
 
-class DQNModel(tf.keras.Model):
+        print("Loaded state:")
+        pprint.pprint(model_dict, depth=1)
 
-    def __init__(self):
-        super(DQNModel, self).__init__()
-        """Define the network that will instruct the agent on
-        predicting the action with the largest future reward, 
-        based on present state.
-        """
+        print("Loading weights from", self.model_location + "...", end="")
         
-        # Model 1
-        self.dense1 = Dense(24, input_dim=4, activation='tanh')
-        self.dense2 = Dense(48, activation='tanh')
-        self.output_layer = Dense(2, activation='linear')
+        if os.path.exists(self.model_location):
+            self.model = tf.keras.models.load_model(self.model_location)
+            # TODO move inside of model save
+            self.optimizer = self.optimizer.from_config(self.optimizer_config)
+            del self.optimizer_config
 
-    def call(self, inputs, training=False):
-
-        x = self.dense1(inputs)
-        x = self.dense2(x)
-
-        return self.output_layer(x)
+            print(" Loaded.")
+        else:
+            print(" Model not yet saved at loaction.")
