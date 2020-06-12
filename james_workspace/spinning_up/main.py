@@ -41,7 +41,6 @@ def parse_args():
     parser.add_argument("--plot", action="store_true", 
                         help="Whether to plot the experiment output")
 
-
     # parser.add_argument("--model", type=str, default="default",
     #                     help="The model to be run. Options: "
     #                          "side_camp_dqn, (default)")
@@ -49,7 +48,6 @@ def parse_args():
     return parser.parse_args()
 
 
-# TODO clean up the DQN learning processing
 # TODO fix up a virtual env to remove the tensorflow errors (start one from scratch, as with gridworlds)
 
 
@@ -76,7 +74,15 @@ if __name__ == "__main__":
         agent.show_example(cart, steps=99)
 
     if args.plot:
-        plot_scores(agent.experiment_dir + "scores.png", agent.scores)
-        smoothed_scores = smooth_over(agent.scores, 10)
-        plot_scores(agent.experiment_dir + "smooth_scores.png", smoothed_scores)
+        plot_scores(
+            agent.experiment_dir + "scores.png", 
+            agent.scores)
+
+        for smooth_over_x in (10, cart.episodes_threshold):
+            smoothed_scores = smooth_over(agent.scores, smooth_over_x)
+            smooth_title = "smoothed over " + str(smooth_over_x)
+            plot_scores(
+                agent.experiment_dir + "smooth_scores_" + str(smooth_over_x) + ".png",
+                smoothed_scores, 
+                title=smooth_title)
 

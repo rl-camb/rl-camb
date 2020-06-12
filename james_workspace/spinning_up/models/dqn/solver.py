@@ -12,31 +12,41 @@ from models.standard_agent import StandardAgent
 
 
 class DQNSolver(StandardAgent):
-    """A standard dqn_solver.
+    """
+    A standard dqn_solver.
     Implements a simple DNN that predicts values.
     """
 
-    def __init__(self, experiment_name, state_size, action_size):
+    def __init__(self, experiment_name, state_size, action_size, 
+        memory_len=100000, 
+        gamma=1.,
+        epsilon=1.,
+        epsilon_min=0.01,
+        epsilon_decay=0.995,
+        learning_rate=0.01,
+        learning_rate_decay=0.01,
+        batch_size=64,
+        model_name="dqn"):
 
         self.state_size = state_size
         self.action_size = action_size
-        self.memory = deque(maxlen=100000)
-        self.gamma = 1.    # discount rate was 1
-        self.epsilon = 1.0  # exploration rate
-        self.epsilon_min = 0.01
-        self.epsilon_decay = 0.995 # 0.995
-        self.learning_rate = 0.01
-        self.learning_rate_decay = 0.01
-        self.batch_size = 64
+        self.memory = deque(maxlen=memory_len)
+        self.gamma = gamma    # discount rate was 1
+        self.epsilon = epsilon  # exploration rate
+        self.epsilon_min = epsilon_min
+        self.epsilon_decay = epsilon_decay # 0.995
+        self.learning_rate = learning_rate
+        self.learning_rate_decay = learning_rate_decay
+        self.batch_size = batch_size
 
-        self.model_name = "dqn"
+        self.model_name = model_name
         self.model = self.build_model()
 
         self.optimizer = Adam(
             lr=self.learning_rate, 
             decay=self.learning_rate_decay)
 
-        super(DQNSolver, self).__init__(experiment_name + "_" + self.model_name)
+        super(DQNSolver, self).__init__(self.model_name + "_" + experiment_name)
 
         self.load_state()
 
@@ -94,7 +104,7 @@ class DQNSolver(StandardAgent):
             for step in itertools.count():
                 if render:
                     env.render()
-                action = self.act(state).numpy()
+                action = self.act(state)
                 observation, reward, done, _ = env.step(action)
                 state_next = observation
                 # Custom reward if required by env wrapper
@@ -128,37 +138,38 @@ class DQNSolver(StandardAgent):
                 return True
 
         return False
-    
-    @tf.function
+
     def act(self, state):
         """Take a random action or the most valuable predicted
         action, based on the agent's model. 
         """
+
+        assert state.shape == (self.state_size,) or state.shape == (1, self.state_size)
 
         # If in exploration
         if np.random.rand() <= self.epsilon:
             return random.randrange(self.action_size)
 
         if state.ndim == 1:
-            state = tf.reshape(state, (1, state.shape[0]))
+            state = tf.reshape(state, (1, self.state_size))
         act_values = self.model(state)
-        
-        return tf.math.argmax(act_values, axis=-1)
+
+        return tf.math.argmax(act_values, axis=-1).numpy()[0]
     
     def learn(self):
         """Updated the agent's decision network based
         on a sample of previous decisions it has seen.
         Here, we combine the target and action networks.
         """
-
-        minibatch = [
-            self.memory[i] for i in np.random.choice(
-                min(self.batch_size, len(self.memory)),
-                self.batch_size)
-            ]
+        
+        minibatch_i = np.random.choice(len(self.memory),
+            min(self.batch_size, len(self.memory)),
+            )
+        
+        minibatch = [self.memory[i] for i in minibatch_i]
 
         loss_value = self.take_training_step(
-            *tuple(map(np.array, zip(*minibatch)))
+            *tuple(map(tf.convert_to_tensor, zip(*minibatch)))
             )
 
         if self.epsilon > self.epsilon_min:
@@ -169,7 +180,7 @@ class DQNSolver(StandardAgent):
 
         future_q_pred = tf.math.reduce_max(self.model(n_sts), axis=-1)
         future_q_pred = tf.where(d, tf.zeros((1,), dtype=tf.dtypes.float64), future_q_pred)
-        q_targets = r + self.gamma * future_q_pred
+        q_targets = tf.cast(r, tf.float64) + self.gamma * future_q_pred
 
         loss_value, grads = self.squared_diff_loss_at_a(sts, a, q_targets)
 
@@ -186,9 +197,8 @@ class DQNSolver(StandardAgent):
         """
         with tf.GradientTape() as tape:
             q_predictions = self.model(states)
-            print(q_predictions)
             
-            gather_indices = tf.range(self.batch_size) * tf.shape(q_predictions)[-1] + action_mask
+            gather_indices = tf.range(action_mask.shape[0]) * tf.shape(q_predictions)[-1] + action_mask
             q_predictions_at_a = tf.gather(tf.reshape(q_predictions, [-1]), gather_indices)
 
             losses = tf.math.squared_difference(q_predictions_at_a, targets_from_memory)
@@ -210,30 +220,29 @@ class DQNSolver(StandardAgent):
 
         self.save_state_to_dict(append_dict=add_to_save)
 
-        # custom_obj = {
-        #     'epsilon': self.epsilon,
-        #     'memory': self.memory,
-        #     'optimizer_config': self.optimizer.get_config,
-        # }
-
-        self.model.save(self.model_location) # , custom_objects=custom_obj)
+        self.model.save(self.model_location)
 
     def load_state(self):
         """Load a model with the specified name"""
 
         model_dict = self.load_state_from_dict()
 
-        print("Loaded state:")
-        pprint.pprint(model_dict, depth=1)
 
         print("Loading weights from", self.model_location + "...", end="")
         
         if os.path.exists(self.model_location):
             self.model = tf.keras.models.load_model(self.model_location)
-            # TODO move inside of model save
+
             self.optimizer = self.optimizer.from_config(self.optimizer_config)
-            del self.optimizer_config
+            del model_dict["optimizer_config"], self.optimizer_config
 
             print(" Loaded.")
+        
         else:
             print(" Model not yet saved at loaction.")
+
+        if "memory" in model_dict:
+            del model_dict["memory"]
+
+        print("Loaded state:")
+        pprint.pprint(model_dict, depth=1)
