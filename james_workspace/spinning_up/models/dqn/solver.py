@@ -1,3 +1,5 @@
+# Inpired by https://gym.openai.com/evaluations/eval_EIcM1ZBnQW2LBaFN6FY65g/
+
 import os, random, itertools, sys, pprint
 
 import numpy as np
