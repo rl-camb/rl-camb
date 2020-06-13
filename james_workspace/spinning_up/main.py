@@ -1,16 +1,8 @@
 from env import CartPoleStandUp
 from models import DQNSolver
+
 from utils.plotting import plot_scores
-import gym, time, random, math, pickle, os, sys, copy, argparse
-
-from utils import smooth_over
-
-class MyParser(argparse.ArgumentParser):
-    
-    def error(self, message):
-        sys.stderr.write('error: {}\n'.format(message))
-        self.print_help()
-        sys.exit(2)
+from utils import smooth_over, MyParser
 
 
 def parse_args():
@@ -48,28 +40,24 @@ def parse_args():
     return parser.parse_args()
 
 
-# TODO fix up a virtual env to remove the tensorflow errors (start one from scratch, as with gridworlds)
-
-
 if __name__ == "__main__":
 
     args = parse_args()
-
-    # ONE - solve the standard cart pole
     cart = CartPoleStandUp(score_target=195., episodes_threshold=100)
-
-    # Look at the obs and action space
-    cart.get_spaces(registry=False)
+    cart.get_spaces(registry=False)  # just viewing
 
     agent = DQNSolver(args.outdir, cart.observation_space, cart.action_space)
 
     if args.example:
-        agent.do_random_runs(cart, episodes=1, steps=99, verbose=True)
+        cart.do_random_runs(cart, episodes=1, steps=99, verbose=True)
     
     if args.train:
-        solved = agent.solve(cart, max_episodes=args.train, verbose=True, render=args.render)
-        print("\nSolved:", solved)
-    
+        solved = agent.solve(
+            cart, max_episodes=args.train, verbose=True, render=args.render)
+        
+        print("\nSolved:", solved, " after", agent.solved_on, 
+              "- time elapsed:", agent.elapsed_time)
+
     if args.show:
         agent.show_example(cart, steps=99)
 
@@ -81,8 +69,7 @@ if __name__ == "__main__":
         for smooth_over_x in (10, cart.episodes_threshold):
             smoothed_scores = smooth_over(agent.scores, smooth_over_x)
             smooth_title = "smoothed over " + str(smooth_over_x)
-            plot_scores(
-                agent.experiment_dir + "smooth_scores_" + str(smooth_over_x) + ".png",
-                smoothed_scores, 
-                title=smooth_title)
+            save_loc = (agent.experiment_dir + "smooth_scores_" + 
+                str(smooth_over_x) + ".png")
+            plot_scores(save_loc, smoothed_scores, title=smooth_title)
 

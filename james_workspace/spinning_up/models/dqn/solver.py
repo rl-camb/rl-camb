@@ -1,7 +1,9 @@
-# Inpired by https://gym.openai.com/evaluations/eval_EIcM1ZBnQW2LBaFN6FY65g/
-
-import os, random, itertools, sys, pprint
-
+import os
+import random
+import itertools
+import sys
+import pprint
+import datetime
 import numpy as np
 import tensorflow as tf
 
@@ -9,13 +11,13 @@ from tensorflow.keras.layers import Dense
 from tensorflow.keras.optimizers import Adam
 
 from collections import deque
-
 from models.standard_agent import StandardAgent
 
 
 class DQNSolver(StandardAgent):
     """
-    A standard dqn_solver.
+    A standard dqn_solver, inpired by:
+      https://gym.openai.com/evaluations/eval_EIcM1ZBnQW2LBaFN6FY65g/
     Implements a simple DNN that predicts values.
     """
 
@@ -59,9 +61,14 @@ class DQNSolver(StandardAgent):
 
         return model
 
+    def show(self, env_wrapper, verbose=False, render=False):
+        raise NotImplementedError(
+            "TODO - implement a show method that runs the agent with "
+            "act(epsilon=0)")
+
     def solve(self, env_wrapper, max_episodes, verbose=False, render=False):
         env = env_wrapper.env
-
+        start_time = datetime.datetime.now()
         for episode in range(max_episodes):
             state = env.reset()
             # Take steps until failure / win
@@ -72,8 +79,10 @@ class DQNSolver(StandardAgent):
                 observation, reward, done, _ = env.step(action)
                 state_next = observation
                 # Custom reward if required by env wrapper
-                reward = env_wrapper.reward_on_step(state, state_next, reward, done)
-                self.memory.append((state, np.int32(action), reward, state_next, done))
+                reward = env_wrapper.reward_on_step(
+                    state, state_next, reward, done)
+                self.memory.append(
+                    (state, np.int32(action), reward, state_next, done))
                 state = observation
                 
                 print(f"\rEpisode {episode + 1}/{max_episodes} - "
@@ -91,18 +100,21 @@ class DQNSolver(StandardAgent):
             score = env_wrapper.get_score(state, state_next, reward, step)
             self.scores.append(score) 
 
-            solved, overall_score = env_wrapper.check_solved_on_done(state, self.scores, verbose=verbose)
+            solved, agent_score = env_wrapper.check_solved_on_done(
+                state, self.scores, verbose=verbose)
 
             if episode % 25 == 0 or solved:
-                print(f"\rEpisode {episode + 1}/{max_episodes} - steps {step} - "
-                      f"score {int(overall_score)}/{int(env_wrapper.score_target)}")
+                print(f"\rEpisode {episode + 1}/{max_episodes} "
+                      f"- steps {step} - score {int(agent_score)}/"
+                      f"{int(env_wrapper.score_target)}")
                 self.save_state()
 
             if solved:
                 self.solved_on = episode
-                return True
-
-        return False
+                break
+        
+        self.elapsed_time += (datetime.datetime.now() - start_time)
+        return solved
 
     def act(self, state, epsilon=0.0):
         """Take a random action or the most valuable predicted
@@ -146,39 +158,43 @@ class DQNSolver(StandardAgent):
     def take_training_step(self, sts, a, r, n_sts, d):
 
         future_q_pred = tf.math.reduce_max(self.model(n_sts), axis=-1)
-        future_q_pred = tf.where(d, tf.zeros((1,), dtype=tf.dtypes.float64), future_q_pred)
+        future_q_pred = tf.where(d, 
+            tf.zeros((1,), dtype=tf.dtypes.float64), 
+            future_q_pred)
         q_targets = tf.cast(r, tf.float64) + self.gamma * future_q_pred
 
         loss_value, grads = self.squared_diff_loss_at_a(sts, a, q_targets)
 
-        self.optimizer.apply_gradients(zip(grads, self.model.trainable_variables))
+        self.optimizer.apply_gradients(
+            zip(grads, self.model.trainable_variables))
         
         return loss_value
 
     @tf.function
-    def squared_diff_loss_at_a(self, states, action_mask, targets_from_memory):
+    def squared_diff_loss_at_a(self, sts, a, q_next):
         """
         A squared difference loss function 
         Diffs the Q model's predicted values for a state with 
         the actual reward + predicted values for the next state
         """
         with tf.GradientTape() as tape:
-            q_predictions = self.model(states)
-            
-            gather_indices = tf.range(action_mask.shape[0]) * tf.shape(q_predictions)[-1] + action_mask
-            q_predictions_at_a = tf.gather(tf.reshape(q_predictions, [-1]), gather_indices)
+            q_s = self.model(sts)  # Q(st)
+            # Take only predicted value of the action taken for Q(st|at)
+            gather_indices = tf.range(a.shape[0]) * tf.shape(q_s)[-1] + a
+            q_s_a = tf.gather(tf.reshape(q_s, [-1]), gather_indices)
 
-            losses = tf.math.squared_difference(q_predictions_at_a, targets_from_memory)
+            # Q(st|at) diff Q(st+1)
+            losses = tf.math.squared_difference(q_s_a, q_next)
             reduced_loss = tf.math.reduce_mean(losses)
 
-        return reduced_loss, tape.gradient(reduced_loss, self.model.trainable_variables)
+        return (reduced_loss, 
+                tape.gradient(reduced_loss, self.model.trainable_variables))
 
     def save_state(self):
         """Save a (trained) model with its weights to a specified file.
         Metadata should be passed to keep information avaialble.
         """
 
-        # TODO move optimizer inside of model save
         add_to_save = {
             "epsilon": self.epsilon,
             "memory": self.memory,

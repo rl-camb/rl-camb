@@ -26,16 +26,6 @@ class Env(object):
         print("Obs space:", self.env.observation_space)
         #> Box(4,)
 
-    def show_example(self, steps):
-        """Show a quick view of the environemt, 
-        without trying to solve.
-        """
-        self.env.reset()
-        for _ in range(steps):
-            self.env.render()
-            self.env.step(env.action_space.sample())
-        self.env.close()
-
     def do_random_runs(self, episodes, steps, verbose=False, wait=0.0):
         """Run some episodes with random actions, stopping on 
         actual failure / win conditions. Just for viewing.
