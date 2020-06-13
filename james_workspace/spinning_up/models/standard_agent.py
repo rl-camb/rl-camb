@@ -5,7 +5,7 @@ class StandardAgent():
 
     def __init__(self, experiment_dir):
 
-        self.experiment_dir = "saved_models/" + experiment_dir + "/"
+        self.experiment_dir = "saved_models" + os.sep + experiment_dir + os.sep
         self.model_location = self.experiment_dir + "model.h5"
         self.dict_location =  self.experiment_dir + "status.p"
 
