@@ -8,13 +8,12 @@ class Env(object):
     Environments should inherit from this class.
     """
 
-    def __init__(self, max_episodes, selected_env='MountainCar-v0'):
+    def __init__(self, selected_env='MountainCar-v0'):
         
         # The environment
         self.env = gym.make(selected_env)
 
         # Some meta parameters
-        self.max_episodes = max_episodes
         self.observation_space = self.env.observation_space.shape[0]
         self.action_space = self.env.action_space.n
 
@@ -26,6 +25,36 @@ class Env(object):
         #> Discrete(2)
         print("Obs space:", self.env.observation_space)
         #> Box(4,)
+
+    def show_example(self, steps):
+        """Show a quick view of the environemt, 
+        without trying to solve.
+        """
+        self.env.reset()
+        for _ in range(steps):
+            self.env.render()
+            self.env.step(env.action_space.sample())
+        self.env.close()
+
+    def do_random_runs(self, episodes, steps, verbose=False, wait=0.0):
+        """Run some episodes with random actions, stopping on 
+        actual failure / win conditions. Just for viewing.
+        """
+        for i_episode in range(episodes):
+            observation = self.env.reset()
+            print("Episode {}".format(i_episode+1))
+            for t in range(steps):
+                self.env.render()
+                if verbose:
+                    print(observation)
+                # take a random action
+                action = self.env.action_space.sample()
+                observation, reward, done, info = self.env.step(action)
+                time.sleep(wait)
+                if done:
+                    print("Episode finished after {} timesteps".format(t+1))
+                    break
+        self.env.close()
 
     def get_score(self, state, next_state, reward, step):
         """Returns the score for an episode"""

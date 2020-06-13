@@ -6,9 +6,9 @@ from . import Env
 
 class CustomCartPole(Env):
 
-    def __init__(self, x_threshold=2.4, angle_threshold=12., max_episode_steps=500, cp_id='CustomCartPole-v1'):
+    def __init__(self, angle_threshold=12., x_threshold=2.4, max_episode_steps=500, cp_id='CustomCartPole-v1'):
 
-        Env.__init__(self, selected_env='CartPole-v1')
+        super().__init__(selected_env='CartPole-v1')
 
         self.angle_threshold = angle_threshold
         self.x_threshold = x_threshold
@@ -36,7 +36,9 @@ class CartPoleStandUp(CustomCartPole):
         self.score_target = score_target
         self.episodes_threshold = episodes_threshold
 
-        CustomCartPole.__init__(self, angle_threshold=12., max_episodes=max_episodes, max_episode_steps=max_episode_steps)
+        super().__init__(
+            angle_threshold=angle_threshold,
+            max_episode_steps=max_episode_steps)
 
     def get_score(self, state, next_state, reward, step_number):
         """This task's reward is simply how many steps it has survived."""
