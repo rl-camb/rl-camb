@@ -20,36 +20,30 @@ class DQNSolver(StandardAgent):
     """
 
     def __init__(self, experiment_name, state_size, action_size, 
-        memory_len=100000, 
-        gamma=1.,
-        epsilon=1.,
-        epsilon_min=0.01,
-        epsilon_decay=0.995,
-        learning_rate=0.01,
-        learning_rate_decay=0.01,
-        batch_size=64,
+        memory_len=100000, gamma=1., batch_size=64,
+        epsilon=1., epsilon_min=0.01, epsilon_decay=0.995,
+        learning_rate=0.01, learning_rate_decay=0.01,
         model_name="dqn"):
 
         self.state_size = state_size
         self.action_size = action_size
-        self.memory = deque(maxlen=memory_len)
         self.gamma = gamma    # discount rate was 1
         self.epsilon = epsilon  # exploration rate
         self.epsilon_min = epsilon_min
         self.epsilon_decay = epsilon_decay # 0.995
-        self.learning_rate = learning_rate
-        self.learning_rate_decay = learning_rate_decay
         self.batch_size = batch_size
-
         self.model_name = model_name
+
+        self.memory = deque(maxlen=memory_len)
+        self.solved_on = None
+
         self.model = self.build_model()
 
         self.optimizer = Adam(
-            lr=self.learning_rate, 
-            decay=self.learning_rate_decay)
+            lr=learning_rate, 
+            decay=learning_rate_decay)
 
         super(DQNSolver, self).__init__(self.model_name + "_" + experiment_name)
-
         self.load_state()
 
     def build_model(self):
@@ -74,7 +68,7 @@ class DQNSolver(StandardAgent):
             for step in itertools.count():
                 if render:
                     env.render()
-                action = self.act(state)
+                action = self.act(state, epsilon=self.epsilon)
                 observation, reward, done, _ = env.step(action)
                 state_next = observation
                 # Custom reward if required by env wrapper
@@ -105,19 +99,22 @@ class DQNSolver(StandardAgent):
                 self.save_state()
 
             if solved:
+                self.solved_on = episode
                 return True
 
         return False
 
-    def act(self, state):
+    def act(self, state, epsilon=0.0):
         """Take a random action or the most valuable predicted
         action, based on the agent's model. 
         """
-
-        assert state.shape == (self.state_size,) or state.shape == (1, self.state_size)
+        if (state.shape != (self.state_size,) 
+                and state.shape != (1, self.state_size)):
+            raise NotImplementedError(
+                "Not intended for use on batch state; returns integer")
 
         # If in exploration
-        if np.random.rand() <= self.epsilon:
+        if np.random.rand() <= epsilon:
             return random.randrange(self.action_size)
 
         if state.ndim == 1:
@@ -162,8 +159,8 @@ class DQNSolver(StandardAgent):
     def squared_diff_loss_at_a(self, states, action_mask, targets_from_memory):
         """
         A squared difference loss function 
-        Diffs the Q model's predicted values with 
-        the actual values plus the discounted next state by the target Q network
+        Diffs the Q model's predicted values for a state with 
+        the actual reward + predicted values for the next state
         """
         with tf.GradientTape() as tape:
             q_predictions = self.model(states)
@@ -196,7 +193,6 @@ class DQNSolver(StandardAgent):
         """Load a model with the specified name"""
 
         model_dict = self.load_state_from_dict()
-
 
         print("Loading weights from", self.model_location + "...", end="")
         
