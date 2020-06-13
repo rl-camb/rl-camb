@@ -6,9 +6,9 @@ from . import Env
 
 class CustomCartPole(Env):
 
-    def __init__(self, x_threshold=2.4, angle_threshold=12., max_episodes=2000, max_episode_steps=500, cp_id='CustomCartPole-v1'):
+    def __init__(self, x_threshold=2.4, angle_threshold=12., max_episode_steps=500, cp_id='CustomCartPole-v1'):
 
-        Env.__init__(self, max_episodes=max_episodes, selected_env='CartPole-v1')
+        Env.__init__(self, selected_env='CartPole-v1')
 
         self.angle_threshold = angle_threshold
         self.x_threshold = x_threshold
@@ -28,26 +28,13 @@ class CustomCartPole(Env):
         # Override the initialised env
         self.env = gym.make('CustomCartPole-v1')
 
-    def solve(self, plot=False, verbose=False, render=True):
-        """Wrapper for solve."""
-        finished, episodes, scores = self._solve(verbose=verbose, render=render)
-        
-        print("FINISHED:", finished)
-        if plot:
-            plt.figure()
-            plt.plot(episodes, scores)
-            plt.show()
-
-        return episodes, scores
-
 
 class CartPoleStandUp(CustomCartPole):
     
-    def __init__(self, angle_threshold=12., max_episodes=2000, score_target=195., episodes_threshold=100, max_episode_steps=500):
+    def __init__(self, angle_threshold=12., score_target=195., episodes_threshold=100, max_episode_steps=500):
         
         self.score_target = score_target
         self.episodes_threshold = episodes_threshold
-        self.max_episodes = max_episodes
 
         CustomCartPole.__init__(self, angle_threshold=12., max_episodes=max_episodes, max_episode_steps=max_episode_steps)
 

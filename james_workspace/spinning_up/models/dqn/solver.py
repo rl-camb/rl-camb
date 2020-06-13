@@ -65,38 +65,6 @@ class DQNSolver(StandardAgent):
 
         return model
 
-    def show_example(self, env_wrapper, steps):
-        """Show a quick view of the environemt, 
-        without trying to solve.
-        """
-        env = env_wrapper.env
-        env.reset()
-        for _ in range(steps):
-            self.env.render()
-            self.env.step(env.action_space.sample())
-        env.close()
-
-    def do_random_runs(self, env_wrapper, episodes, steps, verbose=False, wait=0.0):
-        """Run some episodes with random actions, stopping on 
-        actual failure / win conditions. Just for viewing.
-        """
-        env = env_wrapper.env
-        for i_episode in range(episodes):
-            observation = env.reset()
-            print("Episode {}".format(i_episode+1))
-            for t in range(steps):
-                self.env.render()
-                if verbose:
-                    print(observation)
-                # take a random action
-                action = env.action_space.sample()
-                observation, reward, done, info = env.step(action)
-                time.sleep(wait)
-                if done:
-                    print("Episode finished after {} timesteps".format(t+1))
-                    break
-        env.close()
-
     def solve(self, env_wrapper, max_episodes, verbose=False, render=False):
         env = env_wrapper.env
 
