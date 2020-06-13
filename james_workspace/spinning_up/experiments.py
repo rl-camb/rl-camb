@@ -1,284 +1,184 @@
-import copy, os, pickle
+import copy, os, pickle, pprint
 import matplotlib.pyplot as plt
 import numpy as np
 
-from env import CartPoleStandUp, CartPoleTravel
+from env import CartPoleStandUp
+from models import DQNSolver
+from utils import MyParser
 
-class Experiment:
+class RepeatExperiment():
 
-    def __init__(self, score_target=195., skip_dups=False, verbose=False, render=True):
+    def __init__(self, experiment_name, experiment_dir, score_target=195., 
+        max_episodes=3000, episodes_threshold=100, verbose=False, 
+        render=False):
+        
+        self.experiment_name = experiment_name
+        self.experiment_dir = ("experiments" + os.sep +
+            "repeat_" + experiment_dir + os.sep)
+        os.makedirs(self.experiment_dir, exist_ok=True)
+        self.exp_dict_file = self.experiment_dir + "exp_dict.p"
+        self.max_episodes = max_episodes
         self.score_target = score_target
-        self.skip_dups = skip_dups
+        self.episodes_threshold = episodes_threshold
         self.verbose = verbose
         self.render = render
 
-    def repeat(self, funct, args, repeats=1):
+        self.exp_dict = self.load_experiment_from_file(self.exp_dict_file)
+        if not self.exp_dict:
+            self.exp_dict = {k: [] for k in ("solves", "episodes", "times")}
+            self.exp_dict["max_episodes"] = self.max_episodes
+
+        if self.max_episodes != self.exp_dict["max_episodes"]:
+            self.max_episodes = self.exp_dict["max_episodes"]
+            print(f"WARN: Must keep number of episodes same if continuing an "
+                  f"experiment. Set to {self.max_episodes} "
+                  f"(specified {max_episodes}")
+
+    def repeat_experiment(
+        self, env_wrapper, agent_initialiser, repeats=1):
 
         if repeats < 1:
-            res = self.load_experiment_from_file(funct + self.exp_file_suffix)
+            self.exp_dict = self.load_experiment_from_file(self.exp_dict_file)
 
         for _ in range(repeats):
-            if funct == "from_scratch_":
-                res = self.experiment(**args)
-            elif funct == "from_ref_":
-                res = self.experiment_from_ref(**args)
-            else:
-                raise Exception("Unrecognised function")
+            agent = agent_initialiser(self.experiment_dir, env_wrapper)
 
-        return res
+            solved = agent.solve(
+                env_wrapper, max_episodes=self.max_episodes,
+                verbose=True, render=self.render)
 
-    def load_experiment_from_file(self, exp_file, loss_angles=[]):
+            print("\nSolved:", solved, " after", agent.solved_on, 
+                  "- time elapsed:", agent.elapsed_time)
+
+            self.exp_dict["solves"].append(solved)
+            self.exp_dict["episodes"].append(agent.solved_on)
+            self.exp_dict["times"].append(agent.elapsed_time.seconds)
+
+        print("FINISHED")
+        pprint.pprint(self.exp_dict, compact=True)
+        print("Writing results to ", self.exp_dict_file)
+        with open(self.exp_dict_file, 'wb') as d:
+            pickle.dump(self.exp_dict, d)
+
+        return self.exp_dict
+
+    @staticmethod
+    def load_experiment_from_file(exp_file):
 
         if os.path.exists(exp_file):
-            print("Loading previous experiments", exp_file)
-            with open(exp_file, "rb") as ef:
-                lines = pickle.load(ef)
+            print("Loading", exp_file)
+            with open(exp_file, 'rb') as d:
+                exp_dict = pickle.load(d)
         else:
-            print("Couldn't find", exp_file)
-            print("Making new experiment dict")
-            lines = {an: {"episodes": [], "scores": []} for an in loss_angles}
+            print("File", exp_file, "does not exist.")
+            exp_dict = {}
 
-        return lines
-
-    def plot_summary_figure(self, lines, title, add_to_fig=False):
-        
-        if not add_to_fig:
-            plt.figure()
-        print("Plotting in plot summary")
-        xs = []
-        avg_final_episodes, stdev_final_episodes = [], []
+        return exp_dict
     
-        for an in lines:
-            xs.append(an)
-            episodes = lines[an]["episodes"]
-            avg_final_episodes.append(np.mean([episode[-1] for episode in episodes]))
-            stdev_final_episodes.append(np.std([episode[-1] for episode in episodes]))
-        
-        print("Legend label", title.lower())
-        plt.errorbar(xs, avg_final_episodes, stdev_final_episodes, marker='x', label=title.lower())
-    
-        plt.xlabel("Target")
-        plt.ylabel("Avg episodes to success")
-        if add_to_fig:
-            title = "Reference cart vs from scratch"
-        plt.title(title)
-        plt.legend(loc='lower left')
-        plt.savefig(title.lower().replace(" ", "_") + "_summary.png")
+    def plot_episode_length_comparison(self, compare_to_dicts):
 
-class AngleExperiment(Experiment):
+        fig, ax = plt.subplots()
+        ep_lengths_per_solve = []
+        time_per_eps = []
+        num_solves = []
+        titles = []
 
-    def __init__(self, score_target=195., skip_dups=False, verbose=False, render=True, ref_model_name=None):
-
-        Experiment.__init__(self, score_target, skip_dups, verbose, render)
-
-        if ref_model_name:
-            self.reference_cart_name = ref_model_name + "_reference_cart_" + str(score_target)
-
-        self.exp_file_suffix = "dict_" + str(int(self.score_target)) + ".pickle"
-
-    def experiment_from_ref(self, max_episodes=2000, episodes_threshold=100):
-        
-        # Train a reference cart        
-        ref_cart = CartPoleStandUp(max_episodes=max_episodes, 
-                                   score_target=self.score_target, 
-                                   episodes_threshold=episodes_threshold)
-        
-        # Load or create a reference cart
-        if os.path.exists("models/" + self.reference_cart_name + ".h5"):
-            print("Loading reference cart", end='')
-            ref_cart.dqn_solver.load_model(self.reference_cart_name)
-            print("- loaded.")
-        else:
-            print("Training reference cart", end='')
-            ref_result = ref_cart.solve(verbose=self.verbose, render=self.render)
-            ref_cart.dqn_solver.save_model(self.reference_cart_name,
-                                           ref_cart.angle_threshold, 
-                                           ref_cart.x_threshold, 
-                                           ref_result, 
-                                           ref_cart.max_episode_steps)
-            print("- saved")
-
-        return self.experiment(from_ref=True)
-
-    def experiment(self, from_ref=False):
-        
-        print("Setting up experiment")
-        loss_angles = [8., 12., 16., 20., 24.]
-        
-        if from_ref:
-            print("Running from reference")
-            title = "episodes from reference cart"
-            if not self.reference_cart_name:
-                Exception("No reference cart created")
-        else:
-            print("No refernce cart defined - running from scratch")
-            title = "episodes from scratch"
-
-        lines = self.do_angle_experiment(loss_angles, from_ref=from_ref)
-
-        return lines
-
-    def do_angle_experiment(self, loss_angles, from_ref=False):
-        
-        if from_ref:
-            exp_file = "from_ref_" + self.exp_file_suffix
-        else:
-            exp_file = "from_scratch_" + self.exp_file_suffix
-
-        lines = self.load_experiment_from_file(exp_file, loss_angles)
-        
-        # Fill in any missing angles
-        for an in loss_angles:
-            if an not in lines:
-                lines[an] = {"episodes": [], "scores": []}
-        
-        # Do the experiment and append it up
-        for angle in loss_angles:
-            if self.skip_dups and lines[angle]["episodes"]:
-                print("For angle", angle, "got", len(lines[angle]["episodes"]), "previous runs")
-                continue
-            print("ANGLE", angle)
-            cart = CartPoleStandUp(angle_threshold=angle, score_target=self.score_target)
+        for pickle_dir in [self.exp_dict_file] + compare_to_dicts:
             
-            if from_ref:
-                if not self.reference_cart_name:
-                    raise Exception("Reference cart not defined")
-                print("Loading reference model", self.reference_cart_name)
-                cart.dqn_solver.load_model(self.reference_cart_name)
-    
-            episodes, scores = cart.solve(verbose=self.verbose, render=self.render)
-            lines[angle]["episodes"].append(episodes)
-            lines[angle]["scores"].append(scores)
-    
-            with open(exp_file, "wb") as ef:
-                pickle.dump(lines, ef)
-        
-        return lines
-
-    # Broken
-    def plot_all_figure(self, lines, title):
-        raise NotImplementedException("This is currently out of use")
-        def plot_general(lines, title, smoothed=False):
-            print("Plotting in plot_generate")
-            plt.figure()
-            leg = []
-            for an in lines:
-                # TODO - if different lengths (which they are) - can't average
-                episodes, scores = np.array(lines[an]["episodes"]), np.array(lines[an]["scores"])
-                print(episodes)
-                episodes = np.mean(episodes, axis=0)
-                scores = np.mean(scores, axis=0)
-    
-                if smoothed:
-                    episodes_old = copy.copy(episodes)
-                    # Smooth 20 points to make between episodes.min and episodes.max
-                    episodes = np.linspace(np.min(episodes), np.max(episodes), 20)
-                    scores = spline(episodes_old, scores, episodes)
-    
-                plt.plot(episodes, scores)
-                leg.append(str(an) + "(" + str(len(lines[an]["episodes"])) + ")")
-    
-            plt.legend(leg)
-            plt.xlabel("episodes")
-            plt.ylabel("Score at episode")
-            plt.title(title)
-            plt.savefig(title.lower().replace(" ", "_") + "_all.png")
-        print("Plotting") 
-        plot_general(lines, title)
-        # TODO - implement
-        # plot_general(lines, title.replace("_all.png", "_smoothed_all.png"), smoothed=True)
-
-class TravelExperiment(Experiment):
-    
-    def __init__(self, score_target=50, skip_dups=False, verbose=False, render=True, ref_model_name=None):
-
-        Experiment.__init__(self, score_target, skip_dups, verbose, render)
-
-        if ref_model_name:
-            self.reference_cart_name = ref_model_name + "_reference_cart_TRAVEL_" + str(score_target)
-
-        self.exp_file_suffix = "dict_" + str(self.score_target).replace(".", "-") + "TRAVEL.pickle"
-
-    def experiment(self, from_ref=False):
-
-        print("Setting up experiment")
-        positions = [.3, 1., 1.5, 2.4, 3.]
-        
-        if from_ref:
-            raise NotImplementedException("No from ref in travel exp.")
-            print("Running from reference")
-            title = "episodes from reference cart"
-            if not self.reference_cart_name:
-                Exception("No reference cart created")
-        else:
-            print("No refernce cart defined - running from scratch")
-            title = "episodes from scratch"
-
-        lines = self.do_position_experiment(positions, from_ref=from_ref)
-
-        return lines
-
-    def do_position_experiment(self, positions, from_ref=False):
-        
-        if from_ref:
-            exp_file = "from_ref_" + self.exp_file_suffix
-        else:
-            exp_file = "from_scratch_" + self.exp_file_suffix
-
-        lines = self.load_experiment_from_file(exp_file, positions)
-        
-        # Do the experiment and append it up
-        for pos in positions:
-            # Fill in any missing angles
-            if pos not in lines:
-                lines[pos] = {"episodes": [], "scores": []}
-
-            if self.skip_dups and lines[pos]["episodes"]:
-                print("For position", pos, "got", len(lines[pos]["episodes"]), "previous runs")
-                continue
+            titles.append(pickle_dir.split(os.sep)[-2])
             
-            print("POSITION", pos)
+            exp_dict = RepeatExperiment.load_experiment_from_file(pickle_dir)
+            if not exp_dict:
+                print("WARN: Could not find file " + pickle_dir + 
+                      ", skipping.")
             
-            cart = CartPoleTravel(position_target=pos, score_target=self.score_target)
-            
-            if from_ref:
-                raise NotImplementedException("No from ref in position")
-                if not self.reference_cart_name:
-                    raise Exception("Reference cart not defined")
-                print("Loading reference model", self.reference_cart_name)
-                cart.dqn_solver.load_model(self.reference_cart_name)
-    
-            episodes, scores = cart.solve(verbose=self.verbose, render=self.render)
-            lines[pos]["episodes"].append(episodes)
-            lines[pos]["scores"].append(scores)
-    
-            with open(exp_file, "wb") as ef:
-                pickle.dump(lines, ef)
-        
-        return lines
+            # Read the dicts and extract useful information
+            ep_lengths_per_solve.append([
+                exp_dict["episodes"][i] 
+                for i in range(len(exp_dict["solves"])) 
+                if exp_dict["solves"][i]
+            ])
+            num_episodes = [
+                exp_dict["episodes"][i] if exp_dict["episodes"][i] is not None
+                else exp_dict["max_episodes"]
+                for i in range(len(exp_dict["solves"]))
+            ]
+            time_per_eps.append([
+                exp_dict["times"][i] / num_episodes[i]
+                for i in range(len(exp_dict["times"]))
+            ])
+
+            num_solves.append(
+                (sum(1 if s else 0 for s in exp_dict["solves"]), 
+                 len(exp_dict["solves"]))
+            )
+
+        ax.set_title('Comparing experiments')
+        ax.boxplot(ep_lengths_per_solve)
+        ax.set_xticklabels(titles, rotation=70)
+
+        # Add upper axis text
+        pos = np.arange(len(compare_to_dicts) + 1) + 1
+        weights = ['bold', 'semibold']
+        for tick, label in zip(range(len(compare_to_dicts) + 1), 
+                               ax.get_xticklabels()):
+            k = tick % 2
+            label = ("{0}\nTime {1:.3f} +/- {2:.3f}\nSolved {3}/{4}").format(
+                titles[tick], np.mean(time_per_eps[tick]), 
+                np.std(time_per_eps[tick]), num_solves[tick][0], 
+                num_solves[tick][1]
+            )
+
+            ax.text(pos[tick], .90, label,
+                transform=ax.get_xaxis_transform(),
+                horizontalalignment='center', size='x-small',
+                weight=weights[tick%2]) # , color=box_colors[k])
+
+        plt.savefig(self.experiment_dir + "comparison.png")
+        plt.show()
+
+def parse_args():
+
+    parser = MyParser()
+
+    parser.add_argument("--outdir", type=str, required=True,
+                        help="Suffix for experiment out dir")
+
+    parser.add_argument("--max-episodes", type=int, default=3000,
+                        help="Max episodes for the  experiment")
+
+    parser.add_argument("--repeat", type=int, default=0,
+                        help="Number of repeat experiments")
+
+    parser.add_argument("--compare", type=str, nargs="*", 
+                        help="Which experiment directories to compare number "
+                             "of runs for")
+
+    return parser.parse_args()
+
+def init_dqn(exp_dir, wrapper):
+    return DQNSolver(
+        exp_dir,
+        wrapper.observation_space, 
+        wrapper.action_space, 
+        saving=False)
 
 if __name__ == "__main__":
+
+    args = parse_args()
+    cart = CartPoleStandUp(score_target=195., episodes_threshold=100)
+
+    # TODO add some parameters for experiments
+    experiment = RepeatExperiment(
+        experiment_name="repeats",
+        experiment_dir=args.outdir,
+        max_episodes=args.max_episodes,
+        score_target=cart.score_target, 
+        episodes_threshold=cart.episodes_threshold)
+
+    if args.repeat > 0:
+        experiment.repeat_experiment(
+            cart, init_dqn, repeats=args.repeat)
     
-    # THREE - do the fail angle experiment
-    experiment = AngleExperiment(score_target=5., render=False, verbose=False, skip_dups=False, ref_model_name="tanh")
-    
-    scratch_dict = experiment.repeat("from_scratch_", dict(), repeats=1) 
-    experiment.plot_summary_figure(scratch_dict, "From scratch 195 " + str(len(scratch_dict[12.]["episodes"])))
-
-    ref_dict = experiment.repeat("from_ref_", dict(), repeats=1)
-
-    print("Finished experiment")
-    experiment.plot_summary_figure(ref_dict, "From ref 195 " + str(len(ref_dict[12.]["episodes"])))
-    experiment.plot_summary_figure(scratch_dict, "From scratch 195 " + str(len(scratch_dict[12.]["episodes"])), add_to_fig=True)
-
-    experiment.plot_summary_figure(scratch_dict, "From scratch 195 " + str(len(scratch_dict[12.]["episodes"])), add_to_fig=False)
-
-    # FOUR - do the travelling experiment
-    # Question - how does slowly upping the position to reach change the number of episodes required
-
-    experiment = TravelExperiment(score_target=0.1, render=False, verbose=False, skip_dups=False, ref_model_name="tanh")
-
-    scratch_dict = experiment.repeat("from_scratch_", dict(), 1) 
-
-    # print("Finished experiment")
-    experiment.plot_summary_figure(scratch_dict, "From scratch 195 TRAVEL " + str(len(scratch_dict[1.]["episodes"])), add_to_fig=False)
+    if args.compare is not None:
+        experiment.plot_episode_length_comparison(args.compare)

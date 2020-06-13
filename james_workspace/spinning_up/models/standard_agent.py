@@ -4,16 +4,18 @@ import datetime
 
 class StandardAgent():
 
-    def __init__(self, experiment_dir):
+    def __init__(self, experiment_dir, saving=True):
 
         self.experiment_dir = (
             "saved_models" + os.sep + experiment_dir + os.sep)
         self.model_location = self.experiment_dir + "model.h5"
         self.dict_location =  self.experiment_dir + "status.p"
 
-        self.default_saves = "scores", "total_t", "elapsed_time", 
+        self.default_saves = ["scores", "total_t", "elapsed_time", ]
 
-        os.makedirs(self.experiment_dir, exist_ok=True)
+        self.saving = saving
+        if self.saving:
+            os.makedirs(self.experiment_dir, exist_ok=True)
 
     def save_state_to_dict(self, append_dict={}):
 

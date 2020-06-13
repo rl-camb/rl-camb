@@ -25,7 +25,7 @@ class DQNSolver(StandardAgent):
         memory_len=100000, gamma=1., batch_size=64,
         epsilon=1., epsilon_min=0.01, epsilon_decay=0.995,
         learning_rate=0.01, learning_rate_decay=0.01,
-        model_name="dqn"):
+        model_name="dqn", saving=True):
 
         self.state_size = state_size
         self.action_size = action_size
@@ -45,7 +45,9 @@ class DQNSolver(StandardAgent):
             lr=learning_rate, 
             decay=learning_rate_decay)
 
-        super(DQNSolver, self).__init__(self.model_name + "_" + experiment_name)
+        super(DQNSolver, self).__init__(
+            self.model_name + "_" + experiment_name, 
+            saving=saving)
         self.load_state()
 
     def build_model(self):
@@ -107,7 +109,8 @@ class DQNSolver(StandardAgent):
                 print(f"\rEpisode {episode + 1}/{max_episodes} "
                       f"- steps {step} - score {int(agent_score)}/"
                       f"{int(env_wrapper.score_target)}")
-                self.save_state()
+                if self.saving:
+                    self.save_state()
 
             if solved:
                 self.solved_on = episode
