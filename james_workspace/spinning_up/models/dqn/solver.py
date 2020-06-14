@@ -22,8 +22,8 @@ class DQNSolver(StandardAgent):
     """
 
     def __init__(self, experiment_name, state_size, action_size, 
-        memory_len=100000, gamma=1., batch_size=64,
-        epsilon=1., epsilon_min=0.01, epsilon_decay=0.995,
+        memory_len=100000, gamma=0.99, batch_size=64,
+        epsilon=1., epsilon_min=0.01, epsilon_decay=0.995, 
         learning_rate=0.01, learning_rate_decay=0.01,
         model_name="dqn", saving=True):
 
@@ -82,7 +82,7 @@ class DQNSolver(StandardAgent):
                 state_next = observation
                 # Custom reward if required by env wrapper
                 reward = env_wrapper.reward_on_step(
-                    state, state_next, reward, done)
+                    state, state_next, reward, done, step)
                 self.memory.append(
                     (state, np.int32(action), reward, state_next, done))
                 state = observation

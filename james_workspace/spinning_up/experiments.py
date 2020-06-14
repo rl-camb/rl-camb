@@ -83,14 +83,29 @@ class RepeatExperiment():
         num_solves = []
         titles = []
 
-        for pickle_dir in [self.exp_dict_file] + compare_to_dicts:
+        if compare_to_dicts == ["all"]:
+            experiment_location = os.sep.join(
+                self.experiment_dir.split(os.sep)[:-2])
+            print("Searching in experiment location:")
+            print(experiment_location)
+            pickle_dicts = [
+                os.sep.join((experiment_location, d, "exp_dict.p")) for d in 
+                os.listdir(experiment_location) if "repeat" in d
+            ]
+            print("Found experiments for comparison:")
+            pprint.pprint(pickle_dicts)
+        else:
+            picke_dicts = [self.exp_dict_file] + compare_to_dicts
+
+        for pickle_dict in pickle_dicts:
             
-            titles.append(pickle_dir.split(os.sep)[-2])
+            titles.append(pickle_dict.split(os.sep)[-2])
             
-            exp_dict = RepeatExperiment.load_experiment_from_file(pickle_dir)
+            exp_dict = RepeatExperiment.load_experiment_from_file(pickle_dict)
             if not exp_dict:
-                print("WARN: Could not find file " + pickle_dir + 
+                print("WARN: Could not find file " + pickle_dict + 
                       ", skipping.")
+                continue
             
             # Read the dicts and extract useful information
             ep_lengths_per_solve.append([
@@ -115,12 +130,12 @@ class RepeatExperiment():
 
         ax.set_title('Comparing experiments')
         ax.boxplot(ep_lengths_per_solve)
-        ax.set_xticklabels(titles, rotation=70)
+        ax.set_xticklabels(titles, rotation=40)
 
         # Add upper axis text
-        pos = np.arange(len(compare_to_dicts) + 1) + 1
+        pos = np.arange(len(pickle_dicts)) + 1
         weights = ['bold', 'semibold']
-        for tick, label in zip(range(len(compare_to_dicts) + 1), 
+        for tick, label in zip(range(len(pickle_dicts)), 
                                ax.get_xticklabels()):
             k = tick % 2
             label = ("{0}\nTime {1:.3f} +/- {2:.3f}\nSolved {3}/{4}").format(
@@ -141,22 +156,22 @@ def parse_args():
 
     parser = MyParser()
 
-    parser.add_argument("--outdir", type=str, required=True,
+    parser.add_argument("--outdir", type=str, required=False, default="outdir",
                         help="Suffix for experiment out dir")
 
-    parser.add_argument("--max-episodes", type=int, default=3000,
-                        help="Max episodes for the  experiment")
+    parser.add_argument("--max-episodes", type=int, default=2000,
+                        help="Max episodes for the  experiment.")
 
     parser.add_argument("--repeat", type=int, default=0,
-                        help="Number of repeat experiments")
+                        help="Number of repeat experiments to perform.")
 
     parser.add_argument("--compare", type=str, nargs="*", 
-                        help="Which experiment directories to compare number "
-                             "of runs for")
+                        help="Which experiment dictionaries to compare number "
+                             "of runs for. Options: list of dicts or 'all'.")
 
     return parser.parse_args()
 
-def init_dqn(exp_dir, wrapper):
+def init_dqn(exp_dir, wrapper, gamma):
     return DQNSolver(
         exp_dir,
         wrapper.observation_space, 
@@ -166,19 +181,31 @@ def init_dqn(exp_dir, wrapper):
 if __name__ == "__main__":
 
     args = parse_args()
-    cart = CartPoleStandUp(score_target=195., episodes_threshold=100)
 
-    # TODO add some parameters for experiments
-    experiment = RepeatExperiment(
-        experiment_name="repeats",
-        experiment_dir=args.outdir,
-        max_episodes=args.max_episodes,
-        score_target=cart.score_target, 
-        episodes_threshold=cart.episodes_threshold)
+    rwd_gam_pairs = [
+        (-50, 0.95), (-50, 0.99), (-50, 1.), 
+        (-10, 0.95), (-10, 0.99), (-10, 1.),
+        (-1,  0.95), (-1,  0.99)
+    ]
 
-    if args.repeat > 0:
-        experiment.repeat_experiment(
-            cart, init_dqn, repeats=args.repeat)
-    
+    for rwd, gamma in rwd_gam_pairs:
+
+        cart = CartPoleStandUp(
+            score_target=195., episodes_threshold=100, reward_on_fail=rwd)
+
+        experiment = RepeatExperiment(
+            experiment_name="dqn_repeats_rwd_gamma",
+            experiment_dir="rwd_" + str(rwd) + "_gam_" + str(gamma).replace(".", ""),
+            max_episodes=args.max_episodes,
+            score_target=cart.score_target, 
+            episodes_threshold=cart.episodes_threshold
+        )
+
+        if args.repeat > 0:
+            experiment.repeat_experiment(
+                cart, 
+                lambda x, y: init_dqn(x, y, gamma),
+                repeats=args.repeat)
+
     if args.compare is not None:
         experiment.plot_episode_length_comparison(args.compare)

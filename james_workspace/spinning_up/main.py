@@ -43,10 +43,12 @@ def parse_args():
 if __name__ == "__main__":
 
     args = parse_args()
-    cart = CartPoleStandUp(score_target=195., episodes_threshold=100)
+    cart = CartPoleStandUp(
+        score_target=195., episodes_threshold=100, reward_on_fail=-10)
     cart.get_spaces(registry=False)  # just viewing
 
-    agent = DQNSolver(args.outdir, cart.observation_space, cart.action_space)
+    agent = DQNSolver(
+        args.outdir, cart.observation_space, cart.action_space, gamma=0.99)
 
     if args.example:
         cart.do_random_runs(cart, episodes=1, steps=99, verbose=True)
