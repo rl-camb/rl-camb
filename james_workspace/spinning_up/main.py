@@ -1,5 +1,5 @@
 from env import CartPoleStandUp
-from models import DQNSolver
+from models import DQNSolver, VPGSolver
 
 from utils.plotting import plot_scores
 from utils import smooth_over, MyParser
@@ -44,10 +44,10 @@ if __name__ == "__main__":
 
     args = parse_args()
     cart = CartPoleStandUp(
-        score_target=195., episodes_threshold=100, reward_on_fail=-10)
+        score_target=195., episodes_threshold=100, reward_on_fail=-10.)
     cart.get_spaces(registry=False)  # just viewing
 
-    agent = DQNSolver(
+    agent = VPGSolver(
         args.outdir, cart.observation_space, cart.action_space, gamma=0.99)
 
     if args.example:
@@ -55,7 +55,7 @@ if __name__ == "__main__":
     
     if args.train:
         solved = agent.solve(
-            cart, max_episodes=args.train, verbose=True, render=args.render)
+            cart, args.train, verbose=True, render=args.render)
         
         print("\nSolved:", solved, " after", agent.solved_on, 
               "- time elapsed:", agent.elapsed_time)
