@@ -21,11 +21,20 @@ class DQNSolver(StandardAgent):
     Implements a simple DNN that predicts values.
     """
 
-    def __init__(self, experiment_name, state_size, action_size, 
-        memory_len=100000, gamma=0.99, batch_size=64,
-        epsilon=1., epsilon_min=0.01, epsilon_decay=0.995, 
-        learning_rate=0.01, learning_rate_decay=0.01,
-        model_name="dqn", saving=True):
+    def __init__(self, 
+        experiment_name,
+        state_size,
+        action_size, 
+        memory_len=100000,
+        gamma=0.99,
+        batch_size=64,
+        epsilon=1.,
+        epsilon_min=0.01,
+        epsilon_decay=0.995, 
+        learning_rate=0.01,
+        learning_rate_decay=0.01,
+        model_name="dqn",
+        saving=True):
 
         self.state_size = state_size
         self.action_size = action_size

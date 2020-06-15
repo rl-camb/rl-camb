@@ -193,9 +193,10 @@ if __name__ == "__main__":
         cart = CartPoleStandUp(
             score_target=195., episodes_threshold=100, reward_on_fail=rwd)
 
+        expdir = "rwd_" + str(rwd) + "_gam_" + str(gamma).replace(".", "")
         experiment = RepeatExperiment(
             experiment_name="dqn_repeats_rwd_gamma",
-            experiment_dir="rwd_" + str(rwd) + "_gam_" + str(gamma).replace(".", ""),
+            experiment_dir=expdir,
             max_episodes=args.max_episodes,
             score_target=cart.score_target, 
             episodes_threshold=cart.episodes_threshold
