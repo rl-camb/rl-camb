@@ -31,7 +31,7 @@ class CustomCartPole(Env):
 
 class CartPoleStandUp(CustomCartPole):
     
-    def __init__(self, angle_threshold=12., score_target=195., episodes_threshold=100, max_episode_steps=500, reward_on_fail=-1):
+    def __init__(self, angle_threshold=12., score_target=195., episodes_threshold=100, max_episode_steps=500, reward_on_fail=-1.):
         
         self.score_target = score_target
         self.episodes_threshold = episodes_threshold
@@ -41,11 +41,17 @@ class CartPoleStandUp(CustomCartPole):
             angle_threshold=angle_threshold,
             max_episode_steps=max_episode_steps)
 
-    def get_score(self, state, next_state, reward, step_number):
-        """This task's reward is simply how many steps it has survived."""
+    def get_score(self, state, next_state, reward_list, step_number):
+        """
+        This task's reward is simply how many steps it has survived.
+        However some implementations provide a reward list.
+        Consider summing this however NOTE: 
+          this makes the finishing criterion harder, because the 
+          final step has a negative reward
+        """
         return step_number
 
-    def reward_on_step(self, state, next_state, reward, done, step):
+    def reward_on_step(self, state, next_state, reward, done, step, **kwargs):
         """The reward per step is the default reward for cartpole
         (1 for a complete step) and -1 if it failed.
         """
@@ -54,7 +60,7 @@ class CartPoleStandUp(CustomCartPole):
             return self.reward_on_fail
         elif done:
             # It's okay to hit max steps
-            return 0
+            return 0.
         else:
             # It's good to stay up
             return reward
