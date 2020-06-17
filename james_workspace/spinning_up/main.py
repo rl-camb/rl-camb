@@ -1,5 +1,5 @@
 from env import CartPoleStandUp
-from models import DQNSolver, VPGSolver
+from models import DQNSolver, VPGSolver, VPGSolverWithMemory
 
 from utils.plotting import plot_scores
 from utils import smooth_over, MyParser
@@ -33,12 +33,28 @@ def parse_args():
     parser.add_argument("--plot", action="store_true", 
                         help="Whether to plot the experiment output")
 
-    # parser.add_argument("--model", type=str, default="default",
-    #                     help="The model to be run. Options: "
-    #                          "side_camp_dqn, (default)")
+    parser.add_argument("--model", type=str,
+                        choices=['vpg', 'vpg_batch', 'dqn'],
+                        help="The model to be run.")
 
     return parser.parse_args()
 
+
+def get_model(model_arg):
+
+    if model_arg == 'vpg':
+        agent = agent = VPGSolver(
+            args.outdir, cart.observation_space, cart.action_space, gamma=0.99)
+    elif model_arg == 'vpg_batch':
+        agent = VPGSolverWithMemory(
+            args.outdir, cart.observation_space, cart.action_space, gamma=0.99)
+    elif model_arg == 'dqn':
+        agent = VPGSolverWithMemory(
+            args.outdir, cart.observation_space, cart.action_space, gamma=0.99)
+    else:
+        raise ValueError("Need to specify a model in valid choices.")
+
+    return agent
 
 if __name__ == "__main__":
 
@@ -47,8 +63,7 @@ if __name__ == "__main__":
         score_target=195., episodes_threshold=100, reward_on_fail=-10.)
     cart.get_spaces(registry=False)  # just viewing
 
-    agent = VPGSolver(
-        args.outdir, cart.observation_space, cart.action_space, gamma=0.99)
+    agent = get_model(args.model)
 
     if args.example:
         cart.do_random_runs(cart, episodes=1, steps=99, verbose=True)
