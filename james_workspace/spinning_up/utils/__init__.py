@@ -1,1 +1,1 @@
-from .utils import smooth_over, MyParser
+from .utils import smooth_over, MyParser, conditional_decorator

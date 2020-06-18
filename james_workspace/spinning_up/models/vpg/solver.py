@@ -15,14 +15,19 @@ from tensorflow.keras.optimizers import Adam
 from collections import deque
 from models.standard_agent import StandardAgent
 
+from utils import conditional_decorator
 
-# TODO: Consider going back to a memory and batch learning..
+
 class VPGSolver(StandardAgent):
     """
     A standard dqn_solver, inpired by:
       https://gym.openai.com/evaluations/eval_EIcM1ZBnQW2LBaFN6FY65g/
     Implements a simple DNN that predicts values.
+    NOTE: 
+        will need to examine steps (total_t), not episodes, as VPG doesn't
+        implement episodes per-training-step
     """
+    can_graph = False  # batch size is variable, cannot use tf graphing
 
     def __init__(self, 
         experiment_name, 
@@ -44,14 +49,22 @@ class VPGSolver(StandardAgent):
         self.epsilon = epsilon
         self.epsilon_decay_rate = epsilon_decay_rate
         self.epsilon_min = epsilon_min
+        
+        self.label = "Batch"  # not by episode, by arbitrary batch
         self.batch_size = batch_size
+        self.min_batch_size = batch_size
+        
         self.model_name = model_name
+
+        self.memory = []  # state
 
         self.solved_on = None
 
         self.model = self.build_model()
 
         self.optimizer = Adam(lr=learning_rate)  # decay=learning_rate_decay)
+
+        self.can_graph = False
 
         super(VPGSolver, self).__init__(
             self.model_name + "_" + experiment_name, 
@@ -104,40 +117,42 @@ class VPGSolver(StandardAgent):
             done, state, episode_rewards = False, env.reset(), []
             state_batch, act_batch, batch_future_rewards = [], [], []
 
+            # STEP THROUGH EPISODE
             for step in itertools.count():
                 if render:
                     env.render()
                 action = self.act(state, epsilon=self.epsilon)
-                observation, reward, done, _ = env.step(action)
+                state_next, reward, done, _ = env.step(action)
 
                 # Custom reward if required by env wrapper
-                state_next = observation
                 reward = env_wrapper.reward_on_step(
                     state, state_next, reward, done, step)
                 
-                # TODO figue out if need copy on both (first step -corner case)
                 state_batch.append(state.copy())
                 act_batch.append(np.int32(action))
                 episode_rewards.append(reward)
 
-                state = observation.copy()
-                print(f"\rBatch {batch_num + 1}/{max_iters} - "
+                # TODO figue out if need copy
+                state = state_next.copy()
+                print(f"\r{self.label} {batch_num + 1}/{max_iters} - "
                       f"steps {step} ({self.total_t + 1})", 
                       end="")
                 sys.stdout.flush()
 
                 self.total_t += 1
+
                 if done:
                     batch_future_rewards += list(
                         self.discount_future_cumsum(
                             episode_rewards, self.gamma))
                     # Run episodes until we have at least batch size example
-                    if len(state_batch) > self.batch_size:
+                    if len(state_batch) > self.min_batch_size:
                         break
                     else:
                         # Get some more experience, clean episode
                         done, state, episode_rewards = False, env.reset(), []
 
+            # HANDLE END OF EPISODE
             # Normalise advantages
             batch_advs = np.array(batch_future_rewards)
             batch_advs = (
@@ -145,25 +160,22 @@ class VPGSolver(StandardAgent):
                  / (np.std(batch_advs) + 1e-8)
             )
 
-            # TODO implement a get_batch function so that solves are identical
-            self.learn(
-                *map(tf.convert_to_tensor, 
-                    (state_batch, act_batch, batch_advs)))
+            self.remember(state_batch, act_batch, batch_advs)
+            self.learn(*self.get_batch_to_train())
 
             score = len(episode_rewards)  # E.g. steps in last episode
-            self.scores.append(score) 
+            self.scores.append(score)
 
             solved, agent_score = env_wrapper.check_solved_on_done(
                 state, self.scores, verbose=verbose)
 
             if batch_num % 25 == 0 or solved:
-                print(f"\rBatch {batch_num + 1}/{max_iters} "
+                print(f"\r{self.label} {batch_num + 1}/{max_iters} "
                       f"- steps {step} - score {int(agent_score)}/"
                       f"{int(env_wrapper.score_target)}")
+
                 if self.saving:
-                    self.save_state(add_to_save={
-                        "optimizer_config": self.optimizer.get_config(),
-                    })
+                    self.save_state()
 
             if solved:
                 self.solved_on = batch_num
@@ -172,8 +184,17 @@ class VPGSolver(StandardAgent):
         self.elapsed_time += (datetime.datetime.now() - start_time)
         return solved
 
+    def remember(self, state_batch, act_batch, batch_advs):
+
+        self.memory = (state_batch, act_batch, batch_advs)
+
+    def get_batch_to_train(self):
+
+        return map(tf.convert_to_tensor, self.memory)
+
     def act(self, state, epsilon=None):
-        """Take a random action or the most valuable predicted
+        """
+        Take a random action or the most valuable predicted
         action, based on the agent's model. 
         """
         if (state.shape != (self.state_size,) 
@@ -204,9 +225,7 @@ class VPGSolver(StandardAgent):
 
         return loss_value
 
-    # TODO have an issue where the batch is not consistent size so "tracing"
-    #  Resolve: Experiment with how good it is with / without memory and fixed BS
-    # @tf.function
+    @conditional_decorator(tf.function, can_graph)
     def take_training_step(self, sts, acts, advs):
         tf.debugging.assert_equal(tf.shape(sts)[0], tf.size(acts), summarize=1) 
         tf.debugging.assert_equal(tf.size(acts), tf.size(advs), summarize=1)
@@ -235,7 +254,10 @@ class VPGSolver(StandardAgent):
         Metadata should be passed to keep information avaialble.
         """
 
-        self.save_state_to_dict(append_dict=add_to_save)
+        self.save_state_to_dict(append_dict={
+            "optimizer_config": self.optimizer.get_config(),
+            "epislon": self.epsilon,
+        })
 
         self.model.save(self.model_location)
 
@@ -264,131 +286,61 @@ class VPGSolver(StandardAgent):
         pprint.pprint(model_dict, depth=1)
 
 
-
 class VPGSolverWithMemory(VPGSolver):
-
-    # The VPG cannot be optimised as batch size constantly changes
-    # Instead implement a memory and memory replay, investigate stability
-    # NOTE: will need to examine steps (total_t), not episodes
-    # as VPG doesn't implement episodes
-
+    """
+    The VPG cannot be optimised with a tensorflow graph structure as batch
+    size constantly changes depending on episode length.
+    Instead, implement a memory and memory replay with fixed batch size
+    """
+    can_graph = True  # batch size is fixed, can use tf graphing
+    
     def __init__(self, 
         experiment_name, 
         state_size, 
         action_size, 
-        gamma=0.99,
         memory_len=100000,
-        epsilon=None,
-        epsilon_decay_rate=0.995,
-        epsilon_min=0.1,
-        batch_size=64,
-        learning_rate=0.01,
-        model_name="vpg_batch", 
-        saving=True):
+        model_name="vpg_batch",
+        **kwargs):
         
         self.memory = deque(maxlen=memory_len)
 
+        # Rest of state defaults remain the same
         super().__init__(
             experiment_name, 
             state_size=state_size, 
             action_size=action_size,
-            gamma=gamma,
-            epsilon=epsilon,
-            epsilon_decay_rate=epsilon_decay_rate,
-            epsilon_min=epsilon_min,
-            batch_size=batch_size,
-            learning_rate=learning_rate,
-            model_name=model_name, 
-            saving=saving)
-
+            model_name=model_name,
+            **kwargs)
     
-    # TODO switch batch implementation to memory step saving
-    def solve(self, env_wrapper, max_episodes, verbose=False, render=False):
-        # TODO implement episodes and deque instead of batch
-        env = env_wrapper.env
-        start_time = datetime.datetime.now()
-        
-        for episode in range(max_episodes):
-            
-            done, state, episode_rewards = False, env.reset(), []
-            state_batch, act_batch, batch_future_rewards = [], [], []
+        self.label = "Episode"  # Iterates by episode
+        self.min_batch_size = 0  # stop episodes on done no matter what length
 
-            for step in itertools.count():
-                if render:
-                    env.render()
-                action = self.act(state, epsilon=self.epsilon)
-                observation, reward, done, _ = env.step(action)
-
-                # Custom reward if required by env wrapper
-                state_next = observation
-                reward = env_wrapper.reward_on_step(
-                    state, state_next, reward, done, step)
-                
-                # TODO figue out if need copy on both (first step -corner case)
-                state_batch.append(state.copy())
-                act_batch.append(np.int32(action))
-                episode_rewards.append(reward)
-
-                state = observation.copy()
-                print(f"\rEpisode {episode + 1}/{max_episodes} - "
-                      f"steps {step} ({self.total_t + 1})", 
-                      end="")
-                sys.stdout.flush()
-
-                self.total_t += 1
-                if done:
-                    batch_future_rewards = list(
-                        self.discount_future_cumsum(
-                            episode_rewards, self.gamma))
-                    break
-
-            # Normalise advantages
-            batch_advs = np.array(batch_future_rewards)
-            batch_advs = (
-                (batch_advs - np.mean(batch_advs))
-                 / (np.std(batch_advs) + 1e-8)
-            )
-
-            # TODO optimise
-            for i in range(len(state_batch)):
-                self.memory.append((state_batch[i], act_batch[i], batch_advs[i]))
-            # self.memory.append(tuple(zip(state_batch, act_batch, batch_advs)))
-            assert len(state_batch) == len(act_batch) and len(act_batch) == len(batch_advs)
-
-            self.learn(*self.get_batch_to_train())
-
-            score = len(episode_rewards)  # E.g. steps in last episode
-            self.scores.append(score) 
-
-            solved, agent_score = env_wrapper.check_solved_on_done(
-                state, self.scores, verbose=verbose)
-
-            if episode % 25 == 0 or solved:
-                print(f"\rEpisode {episode + 1}/{max_episodes} "
-                      f"- steps {step} - score {int(agent_score)}/"
-                      f"{int(env_wrapper.score_target)}")
-                if self.saving:
-                    self.save_state(add_to_save={
-                        "optimizer_config": self.optimizer.get_config(),
-                    })
-
-            if solved:
-                self.solved_on = episode
-                break
-        
-        self.elapsed_time += (datetime.datetime.now() - start_time)
-        return solved
-
+    def remember(self, state_batch, act_batch, batch_advs):
+        """
+        Save each step as a tuple of values.
+        """
+        self.memory.extend(tuple(zip(state_batch, act_batch, batch_advs)))
 
     def get_batch_to_train(self):
-        minibatch_i = np.random.choice(len(self.memory),
+        """
+        Sample a random self.batch_size-sized minibatch from self.memory
+        """
+        minibatch_i = np.random.choice(
+            len(self.memory),
             min(self.batch_size, len(self.memory)),
             )
-        
         minibatch = [self.memory[i] for i in minibatch_i]
-
         return tuple(map(tf.convert_to_tensor, zip(*minibatch)))
 
-    @tf.function
-    def take_training_step(self, sts, acts, advs):
-        super().take_training_step(sts, acts, advs)
+    def save_state(self, add_to_save={}):
+        """Save a (trained) model with its weights to a specified file.
+        Metadata should be passed to keep information avaialble.
+        """
+
+        self.save_state_to_dict(append_dict={
+            "optimizer_config": self.optimizer.get_config(),
+            "memory": self.memory,
+            "epislon": self.epsilon
+        })
+
+        self.model.save(self.model_location)

@@ -21,3 +21,10 @@ def smooth_over(list_to_smooth, smooth_last):
                 sum(list_to_smooth[i-smooth_last:i]) / smooth_last
                 )
     return smoothed
+
+def conditional_decorator(dec, condition):
+    def decorator(func):
+        if not condition:
+            return func
+        return dec(func)
+    return decorator
