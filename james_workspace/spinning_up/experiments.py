@@ -111,22 +111,22 @@ class RepeatExperiment():
         # Collect the dirs we want to compare
         if compare_dirs == ["all"]:
             print(f"Collecting experiments from {self.experiment_location}")
-            for d in os.listdir(self.experiment_location):
-                f = os.sep.join((self.experiment_location, d, "exp_dict.p"))
-                if os.path.exists(f):
-                    print(f"Adding file {f} for comparison")
-                    pickle_dicts.append(f)
-                else:
-                    print(f"Skipping {f} - does not exist.")
+            exp_dirs = [
+                os.sep.join((self.experiment_location, d)) 
+                for d in os.listdir(self.experiment_location)
+            ]
+            exp_dirs = [d for d in exp_dirs if os.path.isdir(d)]
         else:
-            # Collect
-            for d in compare_dirs:
-                f = os.sep.join((d.rstrip(os.sep), "exp_dict.p"))
-                if os.path.exists(f):
-                    print(f"Adding file {f} for comparison")
-                    pickle_dicts.append(f)
-                else:
-                    print(f"Skipping {f} - does not exist.")
+            exp_dirs = compare_dirs
+
+        # Collect exp_dicts
+        for d in exp_dirs:
+            f = os.sep.join((d.rstrip(os.sep), "exp_dict.p"))
+            if os.path.exists(f):
+                print(f"Adding file {f} for comparison")
+                pickle_dicts.append(f)
+            else:
+                print(f"Skipping {f} - does not exist.")
 
         for pickle_dict_file in pickle_dicts:
 
