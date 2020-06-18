@@ -45,6 +45,7 @@ class RepeatExperiment():
                   f"experiment. Set to {self.max_episodes} "
                   f"(specified {self.max_episodes}")
 
+
     def repeat_experiment(self, env_wrapper, agent, repeats=1):
         """
         Repeat training for a given agent and save the results 
@@ -87,7 +88,7 @@ class RepeatExperiment():
             exp_dict = {}
 
         return exp_dict
-    
+
     def plot_episode_length_comparison(self, compare_dirs):
         """
         Plots a box plot comparison of the number of episodes 
@@ -105,27 +106,32 @@ class RepeatExperiment():
         time_per_batch = []
         num_solves = []
         titles = []
+        pickle_dicts = []
 
+        # Collect the dirs we want to compare
         if compare_dirs == ["all"]:
             print(f"Collecting experiments from {self.experiment_location}")
-            look_in_dirs = os.listdir(self.experiment_location)
+            for d in os.listdir(self.experiment_location):
+                f = os.sep.join((self.experiment_location, d, "exp_dict.p"))
+                if os.path.exists(f):
+                    print(f"Adding file {f} for comparison")
+                    pickle_dicts.append(f)
+                else:
+                    print(f"Skipping {f} - does not exist.")
         else:
-            look_in_dirs = compare_dirs
-        
-        pickle_dicts = []
-        for d in look_in_dirs:
-            f = os.sep.join((d.rstrip(os.sep), "exp_dict.p")) 
-            if os.path.exists(f):
-                print(f"Adding file {f} for comparison")
-                pickle_dicts.append(f)
-            else:
-                print(f"Skipping {f} - does not exist.")
+            # Collect
+            for d in compare_dirs:
+                f = os.sep.join((d.rstrip(os.sep), "exp_dict.p"))
+                if os.path.exists(f):
+                    print(f"Adding file {f} for comparison")
+                    pickle_dicts.append(f)
+                else:
+                    print(f"Skipping {f} - does not exist.")
 
         for pickle_dict_file in pickle_dicts:
 
             titles.append(pickle_dict_file.split(os.sep)[-2])
             exp_dict = self.load_experiment_from_file(pickle_dict_file)
-
             if not exp_dict:
                 print(f"WARN: Could not find {pickle_dict_file}, skipping.")
                 continue
