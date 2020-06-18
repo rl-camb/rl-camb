@@ -7,7 +7,6 @@ import datetime
 import numpy as np
 import tensorflow as tf
 
-from tensorflow.keras.layers import Dense
 from tensorflow.keras.optimizers import Adam
 
 from collections import deque
@@ -59,24 +58,8 @@ class DQNSolver(StandardAgent):
             saving=saving)
         self.load_state()
 
-    def build_model(self):
-
-        tf.keras.backend.set_floatx('float64')
-
-        model = tf.keras.Sequential(name=self.model_name)
-        model.add(Dense(24, input_dim=self.state_size, activation='tanh'))
-        model.add(Dense(48, activation='tanh'))
-        model.add(Dense(self.action_size, activation='linear'))
-
-        model.build()
-
-        return model
-
-    def show(self, env_wrapper, verbose=False, render=False):
-        raise NotImplementedError(
-            "TODO - implement a show method that runs the agent with "
-            "act(epsilon=0)")
-
+    # TODO - can this be built into standard agent? Compare with vpg solver
+    # Probably just need to rewrite a run-episode method
     def solve(self, env_wrapper, max_episodes, verbose=False, render=False):
         env = env_wrapper.env
         start_time = datetime.datetime.now()
@@ -86,7 +69,7 @@ class DQNSolver(StandardAgent):
             for step in itertools.count():
                 if render:
                     env.render()
-                action = self.act(state, epsilon=self.epsilon)
+                action = self.act(self.model, state, epsilon=self.epsilon)
                 observation, reward, done, _ = env.step(action)
                 state_next = observation
                 # Custom reward if required by env wrapper
@@ -128,27 +111,9 @@ class DQNSolver(StandardAgent):
         self.elapsed_time += (datetime.datetime.now() - start_time)
         return solved
 
-    def act(self, state, epsilon=0.0):
-        """Take a random action or the most valuable predicted
-        action, based on the agent's model. 
-        """
-        if (state.shape != (self.state_size,) 
-                and state.shape != (1, self.state_size)):
-            raise NotImplementedError(
-                "Not intended for use on batch state; returns integer")
-
-        # If in exploration
-        if np.random.rand() <= epsilon:
-            return random.randrange(self.action_size)
-
-        if state.ndim == 1:
-            state = tf.reshape(state, (1, self.state_size))
-        act_values = self.model(state)
-
-        return tf.math.argmax(act_values, axis=-1).numpy()[0]
-    
     def learn(self):
-        """Updated the agent's decision network based
+        """
+        Updated the agent's decision network based
         on a sample of previous decisions it has seen.
         Here, we combine the target and action networks.
         """
@@ -203,7 +168,8 @@ class DQNSolver(StandardAgent):
                 tape.gradient(reduced_loss, self.model.trainable_variables))
 
     def save_state(self):
-        """Save a (trained) model with its weights to a specified file.
+        """
+        Save a (trained) model with its weights to a specified file.
         Metadata should be passed to keep information avaialble.
         """
 

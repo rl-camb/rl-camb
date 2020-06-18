@@ -43,7 +43,7 @@ def parse_args():
 def get_model(model_arg):
 
     if model_arg == 'vpg':
-        agent = agent = VPGSolver(
+        agent = VPGSolver(
             args.outdir, cart.observation_space, cart.action_space, gamma=0.99)
     elif model_arg == 'vpg_batch':
         agent = VPGSolverWithMemory(

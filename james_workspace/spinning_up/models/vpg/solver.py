@@ -1,5 +1,3 @@
-# TODO - continue with https://github.com/jachiam/rl-intro/blob/master/pg_cartpole.py
-
 import os
 import random
 import itertools
@@ -9,7 +7,6 @@ import datetime
 import numpy as np
 import tensorflow as tf
 
-from tensorflow.keras.layers import Dense
 from tensorflow.keras.optimizers import Adam
 
 from collections import deque
@@ -20,9 +17,8 @@ from utils import conditional_decorator
 
 class VPGSolver(StandardAgent):
     """
-    A standard dqn_solver, inpired by:
-      https://gym.openai.com/evaluations/eval_EIcM1ZBnQW2LBaFN6FY65g/
-    Implements a simple DNN that predicts values.
+    A standard vpg_solver, inpired by:
+      https://github.com/jachiam/rl-intro/blob/master/pg_cartpole.py
     NOTE: 
         will need to examine steps (total_t), not episodes, as VPG doesn't
         implement episodes per-training-step
@@ -54,35 +50,18 @@ class VPGSolver(StandardAgent):
         self.batch_size = batch_size
         self.min_batch_size = batch_size
         
-        self.model_name = model_name
 
         self.memory = []  # state
-
         self.solved_on = None
 
+        self.model_name = model_name
         self.model = self.build_model()
-
         self.optimizer = Adam(lr=learning_rate)  # decay=learning_rate_decay)
-
-        self.can_graph = False
 
         super(VPGSolver, self).__init__(
             self.model_name + "_" + experiment_name, 
             saving=saving)
         self.load_state()
-
-    def build_model(self):
-
-        tf.keras.backend.set_floatx('float64')
-
-        model = tf.keras.Sequential(name=self.model_name)
-        model.add(Dense(24, input_dim=self.state_size, activation='tanh'))
-        model.add(Dense(48, activation='tanh'))
-        model.add(Dense(self.action_size, activation='linear'))
-
-        model.build()
-
-        return model
 
     @staticmethod
     def discount_future_cumsum(episode_rewards, gamma):
@@ -103,11 +82,6 @@ class VPGSolver(StandardAgent):
         assert len(discounted_futures) == len(episode_rewards)
         return discounted_futures
 
-    def show(self, env_wrapper, verbose=False, render=False):
-        raise NotImplementedError(
-            "TODO - implement a show method that runs the agent with "
-            "act(epsilon=None)")
-
     def solve(self, env_wrapper, max_iters, verbose=False, render=False):
         env = env_wrapper.env
         start_time = datetime.datetime.now()
@@ -121,7 +95,7 @@ class VPGSolver(StandardAgent):
             for step in itertools.count():
                 if render:
                     env.render()
-                action = self.act(state, epsilon=self.epsilon)
+                action = self.act(self.model, state, epsilon=self.epsilon)
                 state_next, reward, done, _ = env.step(action)
 
                 # Custom reward if required by env wrapper
@@ -191,25 +165,6 @@ class VPGSolver(StandardAgent):
     def get_batch_to_train(self):
 
         return map(tf.convert_to_tensor, self.memory)
-
-    def act(self, state, epsilon=None):
-        """
-        Take a random action or the most valuable predicted
-        action, based on the agent's model. 
-        """
-        if (state.shape != (self.state_size,) 
-                and state.shape != (1, self.state_size)):
-            raise NotImplementedError(
-                "Not intended for use on batch state; returns integer")
-
-        # If in exploration
-        if epsilon and np.random.rand() <= epsilon:
-            return random.randrange(self.action_size)
-
-        if state.ndim == 1:
-            state = tf.reshape(state, (1, self.state_size))
-
-        return tf.math.argmax(self.model(state), axis=-1).numpy()[0]
     
     def learn(self, sts, acts, advs):
         """Updated the agent's decision network based
@@ -288,9 +243,8 @@ class VPGSolver(StandardAgent):
 
 class VPGSolverWithMemory(VPGSolver):
     """
-    The VPG cannot be optimised with a tensorflow graph structure as batch
-    size constantly changes depending on episode length.
-    Instead, implement a memory and memory replay with fixed batch size
+    A VPG solver that implements batch learning from a memory, for more 
+    stable training (pending test).
     """
     can_graph = True  # batch size is fixed, can use tf graphing
     
@@ -302,7 +256,6 @@ class VPGSolverWithMemory(VPGSolver):
         model_name="vpg_batch",
         **kwargs):
         
-        self.memory = deque(maxlen=memory_len)
 
         # Rest of state defaults remain the same
         super().__init__(
@@ -312,6 +265,8 @@ class VPGSolverWithMemory(VPGSolver):
             model_name=model_name,
             **kwargs)
     
+        # Overwrite parent state
+        self.memory = deque(maxlen=memory_len)
         self.label = "Episode"  # Iterates by episode
         self.min_batch_size = 0  # stop episodes on done no matter what length
 
