@@ -4,24 +4,35 @@ import tempfile
 from env import CartPoleStandUp
 from models import DQNSolver, VPGSolver, VPGSolverWithMemory
 
-class test_models_run(unittest.TestCase):
+class TestModelsRun(unittest.TestCase):
 
-    cart = CartPoleStandUp(
+    env = CartPoleStandUp(
         score_target=195., episodes_threshold=100, reward_on_fail=-10.)
 
     outdir = tempfile.TemporaryDirectory()
 
-    std_args = ("test", cart.observation_space, cart.action_space)
+    std_agent_args = ("test", env.observation_space, env.action_space)
 
+    def test_dqn_train(self):
+        agent = DQNSolver(*self.std_agent_args)
+        agent.solve(self.env, 1, verbose=True, render=False)
 
-    def test_dqn_training(self):
-        agent = VPGSolver(*self.std_args)
-        solved = agent.solve(self.cart, 1, verbose=True, render=False)
+    def test_dqn_show(self):
+        agent = DQNSolver(*self.std_agent_args)
+        agent.show(self.env)
 
-    def test_vpg_training(self):
-        agent = VPGSolverWithMemory(*self.std_args)
-        solved = agent.solve(self.cart, 1, verbose=True, render=False)
-    
-    def test_vpg_with_memory_training(self):
-        agent = VPGSolverWithMemory(*self.std_args)
-        solved = agent.solve(self.cart, 1, verbose=True, render=False)
+    def test_vpg_train(self):
+        agent = VPGSolver(*self.std_agent_args)
+        agent.solve(self.env, 1, verbose=True, render=False)
+
+    def test_vpg_show(self):
+        agent = VPGSolver(*self.std_agent_args)
+        agent.show(self.env)
+
+    def test_vpg_with_memory_train(self):
+        agent = VPGSolverWithMemory(*self.std_agent_args)
+        agent.solve(self.env, 1, verbose=True, render=False)
+
+    def test_vpg_with_memory_show(self):
+        agent = VPGSolverWithMemory(*self.std_agent_args)
+        agent.show(self.env)
