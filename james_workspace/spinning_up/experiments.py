@@ -8,23 +8,33 @@ from utils import MyParser
 
 
 class RepeatExperiment():
+    """A handler for a repeat experiment you may want to do"""
 
-    def __init__(self, experiment_name, experiment_dir, score_target=195., 
-        max_episodes=3000, episodes_threshold=100, verbose=False, 
+    def __init__(self, experiment_location, score_target=195., 
+        max_episodes=2000, episodes_threshold=100, verbose=False, 
         render=False):
-        
-        self.experiment_name = experiment_name
-        self.experiment_dir = ("experiments" + os.sep +
-            self.experiment_name + "_" + experiment_dir + os.sep)
-        os.makedirs(self.experiment_dir, exist_ok=True)
-        self.exp_dict_file = self.experiment_dir + "exp_dict.p"
+
+        self.experiment_location = os.sep.join(
+            ("experiments", experiment_location))
+
         self.max_episodes = max_episodes
         self.score_target = score_target
         self.episodes_threshold = episodes_threshold
         self.verbose = verbose
         self.render = render
 
+    def initialise_experiment(self, experiment_name):
+
+        self.experiment_name = experiment_name
+
+        self.experiment_dir = os.sep.join(
+            (self.experiment_location, self.experiment_name))
+        os.makedirs(self.experiment_dir, exist_ok=True)
+        self.exp_dict_file = os.sep.join(
+            (self.experiment_dir, "exp_dict.p"))
+
         self.exp_dict = self.load_experiment_from_file(self.exp_dict_file)
+
         if not self.exp_dict:
             self.exp_dict = {k: [] for k in ("solves", "episodes", "times")}
             self.exp_dict["max_episodes"] = self.max_episodes
@@ -35,14 +45,15 @@ class RepeatExperiment():
                   f"experiment. Set to {self.max_episodes} "
                   f"(specified {max_episodes}")
 
-    def repeat_experiment(
-        self, env_wrapper, agent_initialiser, repeats=1):
-
+    def repeat_experiment(self, env_wrapper, agent, repeats=1):
+        """
+        Repeat training for a given agent and save the results 
+        in a reusable format"""
         if repeats < 1:
-            self.exp_dict = self.load_experiment_from_file(self.exp_dict_file)
+            self.exp_dict = self.load_experiment_from_file(
+                self.exp_dict_file)
 
         for _ in range(repeats):
-            agent = agent_initialiser(self.experiment_dir)
 
             solved = agent.solve(
                 env_wrapper, self.max_episodes,
@@ -77,6 +88,17 @@ class RepeatExperiment():
         return exp_dict
     
     def plot_episode_length_comparison(self, compare_to_dicts):
+        """
+        Plots a box plot comparison of the number of episodes 
+        taken to solve for each of the experimetns specified.
+
+        compare_to_dicts:
+          1. ["all"], then all experiments in self.experiment_location
+            are found
+          2. Specify a list of dicts to load, and compares to
+            whichever the latest self.exp_dict_file is
+            (last set in initialise_experiment)
+        """
 
         fig, ax = plt.subplots()
         ep_lengths_per_solve = []
@@ -85,13 +107,10 @@ class RepeatExperiment():
         titles = []
 
         if compare_to_dicts == ["all"]:
-            experiment_location = os.sep.join(
-                self.experiment_dir.split(os.sep)[:-2])
-            print("Searching in experiment location:")
-            print(experiment_location)
+            print(f"Collecting experiments from {self.experiment_location}")
             pickle_dicts = [
-                os.sep.join((experiment_location, d, "exp_dict.p")) for d in 
-                os.listdir(experiment_location) if self.experiment_name in d
+                os.sep.join((self.experiment_location, d, "exp_dict.p")) for d in 
+                os.listdir(self.experiment_location)
             ]
             print("Found experiments for comparison:")
             pprint.pprint(pickle_dicts)
@@ -99,13 +118,12 @@ class RepeatExperiment():
             picke_dicts = [self.exp_dict_file] + compare_to_dicts
 
         for pickle_dict in pickle_dicts:
-            
-            titles.append(pickle_dict.split(os.sep)[-2])
-            
+
+            titles.append(self.experiment_name)
             exp_dict = RepeatExperiment.load_experiment_from_file(pickle_dict)
+
             if not exp_dict:
-                print("WARN: Could not find file " + pickle_dict + 
-                      ", skipping.")
+                print(f"WARN: Could not find file {pickle_dict}, skipping.")
                 continue
 
             # Read the dicts and extract useful information
@@ -138,7 +156,7 @@ class RepeatExperiment():
         for tick, label in zip(range(len(pickle_dicts)), 
                                ax.get_xticklabels()):
             k = tick % 2
-            label = ("{0}\nTime {1:.3f} +/- {2:.3f}\nSolved {3}/{4}").format(
+            label = "{0}\nTime {1:.3f} +/- {2:.3f}\nSolved {3}/{4}".format(
                 titles[tick], np.mean(time_per_batch[tick]), 
                 np.std(time_per_batch[tick]), num_solves[tick][0], 
                 num_solves[tick][1]
@@ -177,32 +195,41 @@ if __name__ == "__main__":
 
     args = parse_args()
 
-    agents = {
-        "dqn": DQNSolver, 
-        "vpg": VPGSolver,
-        "vpg_batch": VPGSolverWithMemory
-    }
+    cart = CartPoleStandUp(
+            score_target=195., 
+            episodes_threshold=100, 
+            reward_on_fail=-10.)
 
-    for agent in agents:
-
-        cart = CartPoleStandUp(
-            score_target=195., episodes_threshold=100, reward_on_fail=-10.)
-
-        agent_initialiser = lambda exp_dir: agents[agent](
-            exp_dir, cart.observation_space, cart.action_space, saving=False)
-
-        experiment = RepeatExperiment(
-            experiment_name=args.outdir,
-            experiment_dir=agent,
+    experiment = RepeatExperiment(
+            experiment_location=args.outdir,
             max_episodes=args.max_episodes,
             score_target=cart.score_target,
             episodes_threshold=cart.episodes_threshold
-        )
+    )
+    
+    # MAKE YOUR EXPERIMENT
+
+    # Iterate over
+    agents = {
+        "dqn": DQNSolver, 
+        "vpg": VPGSolver,
+        "vpg_batch": VPGSolverWithMemory,
+    }
+
+    for agent_name in agents:
+
+        experiment.initialise_experiment(agent_name)
+
+        agent = agents[agent_name](
+            experiment.experiment_dir, 
+            cart.observation_space, 
+            cart.action_space, 
+            saving=False)
 
         if args.repeat > 0:
             experiment.repeat_experiment(
                 cart,
-                agent_initialiser,
+                agent,
                 repeats=args.repeat)
 
     if args.compare is not None:
