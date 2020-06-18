@@ -1,6 +1,9 @@
 import os
+import sys
+import random
 import pickle
 import datetime
+import itertools
 
 import numpy as np
 import tensorflow as tf
@@ -47,7 +50,7 @@ class StandardAgent():
             for step in itertools.count():
                 if render:
                     env.render()
-                action = self.act(state, epsilon=self.epsilon)
+                action = self.act(self.model, state, epsilon=self.epsilon)
                 observation, reward, done, _ = env.step(action)
                 state_next = observation
                 # Custom reward if required by env wrapper
@@ -69,8 +72,8 @@ class StandardAgent():
                 state, self.scores, verbose=verbose)
 
             print(f"\rEpisode {episode + 1}/{show_episodes} "
-                  f"- steps {step} - score {int(agent_score)}/"
-                  f"{int(env_wrapper.score_target)}")
+                  f"- steps {step} - score {agent_score}/"
+                  f"{env_wrapper.score_target}")
 
         return solved
 

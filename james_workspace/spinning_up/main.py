@@ -76,7 +76,7 @@ if __name__ == "__main__":
               "- time elapsed:", agent.elapsed_time)
 
     if args.show:
-        agent.show_example(cart, steps=99)
+        agent.show(cart)
 
     if args.plot:
         plot_scores(
