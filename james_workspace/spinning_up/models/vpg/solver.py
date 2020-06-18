@@ -152,7 +152,7 @@ class VPGSolver(StandardAgent):
                     self.save_state()
 
             if solved:
-                self.solved_on = batch_num
+                self.solved_on = (batch_num, self.total_t)
                 break
         
         self.elapsed_time += (datetime.datetime.now() - start_time)

@@ -105,7 +105,7 @@ class DQNSolver(StandardAgent):
                     self.save_state()
 
             if solved:
-                self.solved_on = episode
+                self.solved_on = (episode, self.total_t)
                 break
         
         self.elapsed_time += (datetime.datetime.now() - start_time)
