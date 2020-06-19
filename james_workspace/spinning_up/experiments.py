@@ -45,7 +45,6 @@ class RepeatExperiment():
                   f"experiment. Set to {self.max_episodes} "
                   f"(specified {self.max_episodes}")
 
-
     def repeat_experiment(self, env_wrapper, agent_init, repeats=1):
         """
         Repeat training for a given agent and save the results 

@@ -83,18 +83,18 @@ class VPGSolver(StandardAgent):
         return discounted_futures
 
     def solve(self, env_wrapper, max_iters, verbose=False, render=False):
-        env = env_wrapper.env
         start_time = datetime.datetime.now()
+        env = env_wrapper.env
         
         for batch_num in range(max_iters):
+            state, done, episode_rewards = env.reset(), False, []
             
-            done, state, episode_rewards = False, env.reset(), []
             state_batch, act_batch, batch_future_rewards = [], [], []
 
-            # STEP THROUGH EPISODE
             for step in itertools.count():
                 if render:
                     env.render()
+
                 action = self.act(self.model, state, epsilon=self.epsilon)
                 state_next, reward, done, _ = env.step(action)
 
@@ -106,53 +106,38 @@ class VPGSolver(StandardAgent):
                 act_batch.append(np.int32(action))
                 episode_rewards.append(reward)
 
-                # TODO figue out if need copy
-                state = state_next.copy()
-                print(f"\r{self.label} {batch_num + 1}/{max_iters} - "
-                      f"steps {step} ({self.total_t + 1})", 
-                      end="")
-                sys.stdout.flush()
+                # NOTE: Removed copy
+                state = state_next
 
-                self.total_t += 1
+                self.report_step(step, batch_num, max_iters)
 
                 if done:
                     batch_future_rewards += list(
                         self.discount_future_cumsum(
                             episode_rewards, self.gamma))
-                    # Run episodes until we have at least batch size example
-                    if len(state_batch) > self.min_batch_size:
-                        break
-                    else:
+                    if not len(state_batch) > self.min_batch_size:
                         # Get some more experience, clean episode
-                        done, state, episode_rewards = False, env.reset(), []
+                        state, done, episode_rewards = env.reset(), False, []
+                    else:
+                        break
 
             # HANDLE END OF EPISODE
-            # Normalise advantages
             batch_advs = np.array(batch_future_rewards)
-            batch_advs = (
-                (batch_advs - np.mean(batch_advs))
-                 / (np.std(batch_advs) + 1e-8)
+            normalised_batch_advs = ( (batch_advs - np.mean(batch_advs))
+                / (np.std(batch_advs) + 1e-8)
             )
 
-            self.remember(state_batch, act_batch, batch_advs)
+            self.remember(state_batch, act_batch, normalised_batch_advs)
             self.learn(*self.get_batch_to_train())
 
             score = len(episode_rewards)  # E.g. steps in last episode
             self.scores.append(score)
 
-            solved, agent_score = env_wrapper.check_solved_on_done(
-                state, self.scores, verbose=verbose)
-
-            if batch_num % 25 == 0 or solved:
-                print(f"\r{self.label} {batch_num + 1}/{max_iters} "
-                      f"- steps {step} - score {int(agent_score)}/"
-                      f"{int(env_wrapper.score_target)}")
-                if self.saving:
-                    self.save_state()
+            solved = self.handle_episode_end(
+                env_wrapper, state, state_next, reward, 
+                step, max_iters, verbose=verbose)
 
             if solved:
-                # TODO - currently overwrites current solved on, even if picking up an old one.
-                self.solved_on = (batch_num, self.total_t)
                 break
         
         self.elapsed_time += (datetime.datetime.now() - start_time)

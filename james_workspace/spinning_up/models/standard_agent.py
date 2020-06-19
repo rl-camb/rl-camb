@@ -68,14 +68,9 @@ class StandardAgent():
             # Calculate a (optionally custom) score for this episode
             score = env_wrapper.get_score(state, state_next, reward, step)
 
-            solved, agent_score = env_wrapper.check_solved_on_done(
-                state, self.scores, verbose=verbose)
-
             print(f"\rEpisode {episode + 1}/{show_episodes} "
-                  f"- steps {step} - score {agent_score}/"
+                  f"- steps {step} - score {score}/"
                   f"{env_wrapper.score_target}")
-
-        return solved
 
     def act(self, action_model, state, epsilon=None):
         """
@@ -108,11 +103,43 @@ class StandardAgent():
 
         return tf.math.argmax(action_model(state), axis=-1).numpy()[0]
 
+    def report_step(self, step, batch, max_batches):
+
+        print(
+            f"\rEpisode {batch + 1}/{max_batches} ({self.total_episodes}) "
+            f"- steps {step} ({self.total_t + 1})",
+            end="")
+        sys.stdout.flush()
+
+        self.total_t += 1
+
+    def handle_episode_end(self, env_wrapper, state, state_next, 
+        reward, step, max_episodes, verbose=False):
+
+        solved, agent_score = env_wrapper.check_solved_on_done(
+            self.scores, verbose=verbose)
+
+        if self.total_episodes % 25 == 0 or solved:
+            print(f"\rEpisode {self.total_episodes + 1}/{max_episodes} "
+                  f"- steps {step} - score {int(agent_score)}/"
+                  f"{int(env_wrapper.score_target)}")
+            if self.saving:
+                self.save_state()
+
+        self.total_episodes += 1
+
+        if solved:
+            self.solved_on = (self.total_episodes, self.total_t)
+
+        return solved
+
     def save_state_to_dict(self, append_dict={}):
 
         model_dict = {}
 
-        for key in ("model_location", "scores", "total_t", "elapsed_time"):
+        for key in (
+                "model_location", "scores", "total_t", 
+                "total_episodes", "elapsed_time"):
             model_dict[key] = getattr(self, key)
 
         model_dict["trained_episodes"] = len(self.scores)
@@ -132,6 +159,7 @@ class StandardAgent():
         # Initialise standard state
         self.scores = model_dict.get("scores", [])
         self.total_t = model_dict.get("total_t", 0)
+        self.total_episodes = model_dict.get("total_episodes", 0)
         self.elapsed_time = model_dict.get(
             "elapsed_time", datetime.timedelta(0))
         

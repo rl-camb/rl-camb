@@ -65,7 +65,7 @@ class CartPoleStandUp(CustomCartPole):
             # It's good to stay up
             return reward
 
-    def check_solved_on_done(self, state, scores, verbose=False):
+    def check_solved_on_done(self, scores, verbose=False):
         """The task is solved if the average score over the last self.episodes_threshold 
         episodes averaged to be over the score threshold.
         """

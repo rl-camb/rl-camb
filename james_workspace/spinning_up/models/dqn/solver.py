@@ -61,54 +61,45 @@ class DQNSolver(StandardAgent):
     # TODO - can this be built into standard agent? Compare with vpg solver
     # Probably just need to rewrite a run-episode method
     def solve(self, env_wrapper, max_episodes, verbose=False, render=False):
-        env = env_wrapper.env
         start_time = datetime.datetime.now()
+        env = env_wrapper.env
+        
         for episode in range(max_episodes):
             state = env.reset()
-            # Take steps until failure / win
+
             for step in itertools.count():
                 if render:
                     env.render()
+
                 action = self.act(self.model, state, epsilon=self.epsilon)
                 observation, reward, done, _ = env.step(action)
                 state_next = observation
+                
                 # Custom reward if required by env wrapper
                 reward = env_wrapper.reward_on_step(
                     state, state_next, reward, done, step)
+
                 self.memory.append(
                     (state, np.int32(action), reward, state_next, done))
                 state = observation
-                
-                print(f"\rEpisode {episode + 1}/{max_episodes} - "
-                      f"steps {step} ({self.total_t + 1})", 
-                      end="")
-                sys.stdout.flush()
 
-                self.total_t += 1
+                self.report_step(step, episode, max_episodes)
                 if done:
                     break
 
             self.learn()
-            
-            # Calculate a (optionally custom) score for this episode
-            score = env_wrapper.get_score(state, state_next, reward, step)
-            self.scores.append(score) 
 
-            solved, agent_score = env_wrapper.check_solved_on_done(
-                state, self.scores, verbose=verbose)
+            score = step 
+            # OR env_wrapper.get_score(state, state_next, reward, step)
+            self.scores.append(step)
 
-            if episode % 25 == 0 or solved:
-                print(f"\rEpisode {episode + 1}/{max_episodes} "
-                      f"- steps {step} - score {int(agent_score)}/"
-                      f"{int(env_wrapper.score_target)}")
-                if self.saving:
-                    self.save_state()
+            solved = self.handle_episode_end(
+                env_wrapper, state, state_next, reward, 
+                step, max_episodes, verbose=verbose)
 
             if solved:
-                # TODO - currently overwrites current solved on, even if picking up an old one.
-                self.solved_on = (episode, self.total_t)
                 break
-        
+
         self.elapsed_time += (datetime.datetime.now() - start_time)
         return solved
 
@@ -170,8 +161,11 @@ class DQNSolver(StandardAgent):
 
     def save_state(self):
         """
+        Called at the end of saving-episodes.
+
         Save a (trained) model with its weights to a specified file.
-        Metadata should be passed to keep information avaialble.
+        Passes the required information to add to the pickle dict for the 
+         model.
         """
 
         add_to_save = {
@@ -190,15 +184,11 @@ class DQNSolver(StandardAgent):
         model_dict = self.load_state_from_dict()
 
         print("Loading weights from", self.model_location + "...", end="")
-        
         if os.path.exists(self.model_location):
             self.model = tf.keras.models.load_model(self.model_location)
-
             self.optimizer = self.optimizer.from_config(self.optimizer_config)
             del model_dict["optimizer_config"], self.optimizer_config
-
             print(" Loaded.")
-        
         else:
             print(" Model not yet saved at loaction.")
 
