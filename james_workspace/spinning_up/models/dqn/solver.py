@@ -105,6 +105,7 @@ class DQNSolver(StandardAgent):
                     self.save_state()
 
             if solved:
+                # TODO - currently overwrites current solved on, even if picking up an old one.
                 self.solved_on = (episode, self.total_t)
                 break
         

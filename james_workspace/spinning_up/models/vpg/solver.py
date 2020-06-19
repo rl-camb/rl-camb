@@ -147,11 +147,11 @@ class VPGSolver(StandardAgent):
                 print(f"\r{self.label} {batch_num + 1}/{max_iters} "
                       f"- steps {step} - score {int(agent_score)}/"
                       f"{int(env_wrapper.score_target)}")
-
                 if self.saving:
                     self.save_state()
 
             if solved:
+                # TODO - currently overwrites current solved on, even if picking up an old one.
                 self.solved_on = (batch_num, self.total_t)
                 break
         

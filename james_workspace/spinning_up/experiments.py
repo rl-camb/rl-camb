@@ -46,7 +46,7 @@ class RepeatExperiment():
                   f"(specified {self.max_episodes}")
 
 
-    def repeat_experiment(self, env_wrapper, agent, repeats=1):
+    def repeat_experiment(self, env_wrapper, agent_init, repeats=1):
         """
         Repeat training for a given agent and save the results 
         in a reusable format"""
@@ -56,6 +56,8 @@ class RepeatExperiment():
 
         for r in range(repeats):
             print(f"\nRepeat {r + 1} / {repeats}")
+
+            agent = agent_init()
 
             solved = agent.solve(
                 env_wrapper, self.max_episodes,
@@ -226,7 +228,7 @@ if __name__ == "__main__":
 
     # Iterate over
     agents = {
-        "dqn": DQNSolver, 
+        "dqn": DQNSolver,
         "vpg": VPGSolver,
         "vpg_batch": VPGSolverWithMemory,
     }
@@ -239,7 +241,7 @@ if __name__ == "__main__":
         experiment.initialise_experiment(agent_name)
 
         # Set the agent to be run
-        agent = agents[agent_name](
+        agent_init = lambda : agents[agent_name](
             experiment.experiment_dir, 
             cart.observation_space, 
             cart.action_space, 
@@ -247,7 +249,7 @@ if __name__ == "__main__":
 
         experiment.repeat_experiment(
             cart,
-            agent,
+            agent_init,
             repeats=args.repeat)
         print("\nComplete\n")
 
