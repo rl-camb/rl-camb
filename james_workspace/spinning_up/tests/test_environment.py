@@ -5,7 +5,8 @@ from env import CartPoleStandUp
 
 class test_environment(unittest.TestCase):
 
-    outdir = tempfile.TemporaryDirectory()
+    tmpdir = tempfile.TemporaryDirectory()
+    outdir = tmpdir.name
 
     def test_cartpole_random_runs(self):
         cart = CartPoleStandUp(
