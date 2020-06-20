@@ -1,5 +1,6 @@
-import unittest
+import os
 import tempfile
+import unittest
 
 from env import CartPoleStandUp
 from models import DQNSolver, VPGSolver, VPGSolverWithMemory
@@ -15,9 +16,10 @@ class TestModelsRun(unittest.TestCase):
 
     tmpdir = tempfile.TemporaryDirectory()
     outdir = tmpdir.name
+    os.chdir(outdir)
 
     std_agent_args = (
-        outdir + "/test",
+        "test",
         env.observation_space,
         env.action_space)
 
