@@ -40,17 +40,19 @@ def parse_args():
     return parser.parse_args()
 
 
-def get_model(model_arg):
+def get_model(model_arg, args_dict):
 
-    if model_arg == 'vpg':
+    std_args = (args.outdir, cart.observation_space, cart.action_space)
+    
+    if model_arg == 'dqn':
+        agent = DQNSolver(
+            *std_args, **args_dict)
+    elif model_arg == 'vpg':
         agent = VPGSolver(
-            args.outdir, cart.observation_space, cart.action_space, gamma=0.99)
+            *std_args, **args_dict)
     elif model_arg == 'vpg_batch':
         agent = VPGSolverWithMemory(
-            args.outdir, cart.observation_space, cart.action_space, gamma=0.99)
-    elif model_arg == 'dqn':
-        agent = VPGSolverWithMemory(
-            args.outdir, cart.observation_space, cart.action_space, gamma=0.99)
+            *std_args, **args_dict)
     else:
         raise ValueError("Need to specify a model in valid choices.")
 
@@ -63,7 +65,11 @@ if __name__ == "__main__":
         score_target=195., episodes_threshold=100, reward_on_fail=-10.)
     cart.get_spaces(registry=False)  # just viewing
 
-    agent = get_model(args.model)
+    args_dict = {
+        "epsilon": 1.,
+    }
+
+    agent = get_model(args.model, args_dict)
 
     if args.example:
         cart.do_random_runs(cart, episodes=1, steps=99, verbose=True)
