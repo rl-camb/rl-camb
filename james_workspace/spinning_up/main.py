@@ -1,5 +1,6 @@
 from env import CartPoleStandUp
-from models import DQNSolver, VPGSolver, VPGSolverWithMemory
+from models import (
+    DQNSolver, VPGSolver, VPGSolverWithMemory, A2CSolver)
 
 from utils.plotting import plot_scores
 from utils import smooth_over, MyParser
@@ -34,7 +35,7 @@ def parse_args():
                         help="Whether to plot the experiment output")
 
     parser.add_argument("--model", type=str,
-                        choices=['vpg', 'vpg_batch', 'dqn'],
+                        choices=['vpg', 'vpg_batch', 'dqn', 'a2c'],
                         help="The model to be run.")
 
     return parser.parse_args()
@@ -53,6 +54,9 @@ def get_model(model_arg, args_dict):
     elif model_arg == 'vpg_batch':
         agent = VPGSolverWithMemory(
             *std_args, **args_dict)
+    elif model_arg == "a2c":
+        agent = A2CSolver(
+            *std_args, **args_dict)
     else:
         raise ValueError("Need to specify a model in valid choices.")
 
@@ -66,7 +70,7 @@ if __name__ == "__main__":
     cart.get_spaces(registry=False)  # just viewing
 
     args_dict = {
-        "epsilon": 1.,
+        # "epsilon": 1.,
     }
 
     agent = get_model(args.model, args_dict)

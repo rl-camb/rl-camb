@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from env import CartPoleStandUp
-from models import DQNSolver, VPGSolver, VPGSolverWithMemory
+from models import DQNSolver, VPGSolver, VPGSolverWithMemory, A2CSolver
 from utils import MyParser
 
 
@@ -227,9 +227,10 @@ if __name__ == "__main__":
 
     # Iterate over
     agents = {
-        "dqn": DQNSolver,
-        "vpg": VPGSolver,
-        "vpg_batch": VPGSolverWithMemory,
+        #"dqn": DQNSolver,
+        #"vpg": VPGSolver,
+        #"vpg_batch": VPGSolverWithMemory,
+        "a2c": A2CSolver,
     }
 
     for i, agent_name in enumerate(agents):
