@@ -49,7 +49,6 @@ class VPGSolver(StandardAgent):
         self.label = "Batch"  # not by episode, by arbitrary batch
         self.batch_size = batch_size
         self.min_batch_size = batch_size
-        
 
         self.memory = []  # state
         self.solved_on = None

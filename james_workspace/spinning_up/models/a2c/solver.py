@@ -25,6 +25,7 @@ class ProbabilityDistribution(tf.keras.Model):
             axis=-1)
 
 
+# TODO try the same model as the other tasks (or make those bigger too)
 class A2CModel(tf.keras.Model):
 
     def __init__(self, input_shape, num_actions):
@@ -66,7 +67,7 @@ class A2CModel(tf.keras.Model):
 
 class A2CSolver(StandardAgent):
     """
-    A standard a2c solver, inpired by:
+    A standard a2c solver:
       https://github.com/openai/baselines/blob/master/baselines/a2c/a2c.py
     Implements a simple DNN that predicts values.
     """
@@ -133,8 +134,9 @@ class A2CSolver(StandardAgent):
                     env.render()
                 
                 observations[step] = next_obs.copy()
-                # Calculate value model
-                actions[step], values[step] = self.model.action_value(next_obs[None, :])
+                # Calculate value model of the currebt state
+                actions[step], values[step] =\
+                    self.model.action_value(next_obs[None, :])
                 # action = self.act(self.model, state, epsilon=self.epsilon)
                 next_obs, reward, dones[step], _ = env.step(actions[step])
 
@@ -155,9 +157,13 @@ class A2CSolver(StandardAgent):
                     success_steps += 1
 
             _, next_value = self.model.action_value(next_obs[None, :])
-            returns, advs = self._returns_advantages(rewards, dones, values, next_value)
-            acts_and_advs = np.concatenate([actions[:, None], advs[:, None]], axis=-1)
-            loss_value = self.model.train_on_batch(observations, [acts_and_advs, returns])
+            # A2C - advantage is actual return - predicted reward
+            returns, advs = self._returns_advantages(
+                rewards, dones, values, next_value)
+            acts_and_advs = np.concatenate(
+                [actions[:, None], advs[:, None]], axis=-1)
+            loss_value = self.model.train_on_batch(
+                observations, [acts_and_advs, returns])
 
             score = last_ep_steps
             # OR env_wrapper.get_score(state, state_next, reward, step)
