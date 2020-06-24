@@ -3,9 +3,9 @@ import tempfile
 import unittest
 
 from env import CartPoleStandUp
-from models import DQNSolver, VPGSolver, VPGSolverWithMemory
+from models import DQNSolver, VPGSolver, VPGSolverWithMemory, A2CSolver, PPOSolver
 
-agents = (DQNSolver, VPGSolver, VPGSolverWithMemory)
+# agents = (DQNSolver, VPGSolver, VPGSolverWithMemory, A2CSolver PPOSolver)
 
 
 # TODO - add testing that clone(model).save model = load is the same (e.g. saves and loads)
@@ -45,6 +45,22 @@ class TestModelsRun(unittest.TestCase):
 
     def test_vpg_with_memory_show(self):
         agent = VPGSolverWithMemory(*self.std_agent_args)
+        agent.show(self.env)
+
+    def test_a2c_train(self):
+        agent = A2CSolver(*self.std_agent_args)
+        agent.solver(self.env, 1, verbose=True, render=False)
+
+    def test_a2c_show(self):
+        agent = A2CSolver(*self.std_agent_args)
+        agent.show(self.env)
+
+    def test_ppo_train(self):
+        agent = PPOSolver(*self.std_agent_args)
+        agent.solver(self.env, 1, verbose=True, render=False)
+
+    def test_ppo_show(self):
+        agent = PPOSolver(*self.std_agent_args)
         agent.show(self.env)
 
 
