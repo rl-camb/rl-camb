@@ -24,19 +24,24 @@ class StandardAgent():
         if self.saving:
             os.makedirs(self.experiment_dir, exist_ok=True)
 
-    def build_model(self):
+    def build_model(self, output_size=None, model_name=None):
         """
         Returns a standard 24x48xaction_space tanh activated dense network. 
         If you don't care what network you're using, this is a good start for
         solving something like cartpole in <1000 epsiodes
         """
 
+        if not output_size:
+            output_size = self.action_size
+        if not model_name:
+            model_name = self.model_name
+
         tf.keras.backend.set_floatx('float64')
 
-        model = tf.keras.Sequential(name=self.model_name)
+        model = tf.keras.Sequential(name=model_name)
         model.add(Dense(24, input_dim=self.state_size, activation='tanh'))
         model.add(Dense(48, activation='tanh'))
-        model.add(Dense(self.action_size, activation='linear'))
+        model.add(Dense(output_size, activation='linear'))
 
         model.build()
 
