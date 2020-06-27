@@ -19,6 +19,8 @@ class TestModelsRun(unittest.TestCase):
     outdir = tmpdir.name
     os.chdir(outdir)
 
+    env.get_spaces(registry=False)
+
     std_agent_args = (
         "test",
         env.observation_space,
@@ -57,7 +59,7 @@ class TestModelsRun(unittest.TestCase):
         agent = A2CSolver(*self.std_agent_args)
         agent.show(self.env)
 
-    @pytest.mark.skip(reason="Problem with deepcopy, but hoping to change functionality later")
+    # @pytest.mark.skip(reason="Problem with deepcopy, but hoping to change functionality later")
     def test_ppo_train(self):
         agent = PPOSolver(*self.std_agent_args)
         agent.solve(self.env, 1, verbose=True, render=False)

@@ -1,10 +1,12 @@
 # https://github.com/ajleite/basic-ppo/blob/master/ppo.py
 
 import os
-import copy
+import env
+import sys
+import gym
+import importlib
 import random
 import itertools
-import sys
 import pprint
 import datetime
 import numpy as np
@@ -23,12 +25,19 @@ from utils import conditional_decorator
 class EnvTracker():
     """
     A class that can preserve a half-run environment
-    Has an 
+    Recreates the env then saves some left-over information
     """
 
     def __init__(self, env_wrapper):
 
-        self.env = copy.deepcopy(env_wrapper.env)
+        class_name = env_wrapper.__class__.__name__
+        callable_class = getattr(env, class_name)
+        if hasattr(env_wrapper, "kwargs"):
+            self.env_wrapper = callable_class(env_wrapper.kwargs)
+        else:
+            self.env_wrapper = callable_class()
+
+        self.env = self.env_wrapper.env
         self.latest_state = self.env.reset()
         self.return_so_far = 0.
         self.steps_so_far = 0
@@ -138,7 +147,7 @@ class PPOSolver(StandardAgent):
 
                 for step in range(self.cycle_length):
                     if render:
-                        env.render()
+                        env_tracker.env.render()
 
                     action = self.act(self.pi_model, state, epsilon=None)
                     observation, reward, done, _ = env_tracker.env.step(action)

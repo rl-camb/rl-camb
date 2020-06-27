@@ -40,6 +40,7 @@ class CartPoleStandUp(CustomCartPole):
         super().__init__(
             angle_threshold=angle_threshold,
             max_episode_steps=max_episode_steps)
+        self.kwargs = locals()
 
     def get_score(self, state, next_state, reward_list, step_number):
         """

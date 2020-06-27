@@ -10,6 +10,8 @@ class Env(object):
 
     def __init__(self, selected_env='MountainCar-v0'):
         
+        self.env_name = selected_env
+        self.kwargs = None
         # The environment
         self.env = gym.make(selected_env)
 
