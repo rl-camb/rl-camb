@@ -23,12 +23,13 @@ from utils import conditional_decorator
 class EnvTracker():
     """
     A class that can preserve a half-run environment
+    Has an 
     """
 
-    def __init__(self, env):
+    def __init__(self, env_wrapper):
 
-        self.env = copy.deepcopy(env)
-        self.latest_state = env.reset()
+        self.env = copy.deepcopy(env_wrapper.env)
+        self.latest_state = self.env.reset()
         self.return_so_far = 0.
         self.steps_so_far = 0
 
@@ -122,41 +123,32 @@ class PPOSolver(StandardAgent):
 
     def solve(self, env_wrapper, max_iters, verbose=False, render=False):
         start_time = datetime.datetime.now()
-        envs = [copy.deepcopy(env_wrapper).env for _ in range(self.actors)]
+        env_trackers = [EnvTracker(env_wrapper) for _ in range(self.actors)]
         solved = False
 
         # Every episode return ever
         all_episode_returns = []
         all_episode_steps = []
 
-        # Rolling counters for each environment's latest episode
-        rolling_episode_returns = [0 for _ in range(self.actors)]
-        rolling_success_steps = [0 for _ in range(self.actors)]
-        rolling_last_states = [env.reset() for env in envs]
-
         for iteration in range(max_iters):
             memory = []
-            iteration_last_states = []
-            iteration_episode_returns = []
-            iteration_success_steps = []
 
-            for env, state, episode_return, num_steps in zip(
-                    envs, rolling_last_states, rolling_episode_returns, 
-                    rolling_success_steps):
+            for env_tracker in env_trackers:
+                state = env_tracker.latest_state
 
                 for step in range(self.cycle_length):
                     if render:
                         env.render()
 
                     action = self.act(self.pi_model, state, epsilon=None)
-                    observation, reward, done, _ = env.step(action)
+                    observation, reward, done, _ = env_tracker.env.step(action)
                     state_next = observation
 
                     # Custom reward if required by env wrapper
                     reward = env_wrapper.reward_on_step(
                         state, state_next, reward, done, step)
 
-                    episode_return += reward
+                    env_tracker.return_so_far += reward
 
                     memory.append(
                         (state, np.int32(action), np.float64(reward), 
@@ -165,26 +157,17 @@ class PPOSolver(StandardAgent):
 
                     self.report_step(step, iteration, max_iters)
                     if done:
-                        all_episode_returns.append(episode_return)
-                        all_episode_steps.append(num_steps)
-                        state = env.reset()
-                        num_steps = 0
-                        episode_return = 0.
+                        all_episode_returns.append(
+                            env_tracker.return_so_far)
+                        all_episode_steps.append(env_tracker.steps_so_far)
+                        state = env_tracker.env.reset()
+                        env_tracker.steps_so_far = 0
+                        env_tracker.return_so_far = 0.
                     else:
-                        num_steps +=1
+                        env_tracker.steps_so_far += 1
                         state = observation
-                
-                # End of steps for this environment
-                # Update the starting positions for the next 
-                iteration_last_states.append(state)
-                iteration_episode_returns.append(episode_return)
-                iteration_success_steps.append(num_steps)
 
-            # End of environment run for this iteration
-            # Update the rolling counters to the iteration end value
-            rolling_last_states = iteration_last_states
-            rolling_episode_returns = iteration_episode_returns
-            rolling_success_steps = iteration_success_steps
+                env_tracker.latest_state = state
 
             self.scores = all_episode_steps  # FIXME this won't handle picking up from left-off
             solved = self.handle_episode_end(
@@ -196,7 +179,6 @@ class PPOSolver(StandardAgent):
             self.take_training_step(
                 *tuple(map(tf.convert_to_tensor, zip(*memory)))
             )
-
         self.elapsed_time += (datetime.datetime.now() - start_time)
         return solved
 
