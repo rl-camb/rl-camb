@@ -86,7 +86,7 @@ if __name__ == "__main__":
         solved = agent.solve(
             cart, args.train, verbose=True, render=args.render)
         
-        print("\nSolved:", solved, " after", agent.solved_on, 
+        print("\nSolved:", solved, "on step", agent.solved_on, 
               "- time elapsed:", agent.elapsed_time)
 
     if args.show:
