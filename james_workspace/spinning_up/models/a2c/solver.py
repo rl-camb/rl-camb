@@ -149,6 +149,7 @@ class A2CSolver(StandardAgent):
                 self.report_step(step, episode, max_episodes)
 
                 if dones[step]:
+                    # TODO should append to scores not just the last one - missing lots
                     last_ep_steps = success_steps
                     success_steps = 0
                     ep_rewards.append(0.)
