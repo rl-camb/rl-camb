@@ -44,7 +44,7 @@ def parse_args():
 def get_model(model_arg, args_dict):
 
     std_args = (args.outdir, cart.observation_space, cart.action_space)
-    
+    model_arg = model_arg.lower()
     if model_arg == 'dqn':
         agent = DQNSolver(
             *std_args, **args_dict)
@@ -57,7 +57,7 @@ def get_model(model_arg, args_dict):
     elif model_arg == "a2c":
         agent = A2CSolver(
             *std_args, **args_dict)
-    elif model_arg == "PPO":
+    elif model_arg == "ppo":
         agent = PPOSolver(
             *std_args, **args_dict)
     else:
