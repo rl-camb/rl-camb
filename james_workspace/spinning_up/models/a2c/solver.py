@@ -15,22 +15,17 @@ from tensorflow.keras.optimizers import RMSprop
 from collections import deque
 from models.standard_agent import StandardAgent
 
+from utils import ProbabilityDistribution
+
 tf.keras.backend.set_floatx('float64')
-
-
-class ProbabilityDistribution(tf.keras.Model):
-    def call(self, logits, **kwargs):
-        return tf.squeeze(
-            tf.random.categorical(logits, 1),
-            axis=-1)
 
 
 # TODO try the same model as the other tasks (or make those bigger too)
 class A2CModel(tf.keras.Model):
 
-    def __init__(self, input_shape, num_actions):
+    def __init__(self, input_shape, num_actions, model_name='mlp_policy'):
 
-        super().__init__('mlp_policy')
+        super().__init__(model_name)
 
         self.hidden1 = tf.keras.layers.Dense(128, activation='relu')
         self.hidden2 = tf.keras.layers.Dense(128, activation='relu')
@@ -100,7 +95,7 @@ class A2CSolver(StandardAgent):
 
         self.solved_on = None
 
-        self.model = A2CModel(self.state_size, self.action_size)
+        self.model = A2CModel(self.state_size, self.action_size, model_name=model_name)
         self.model.compile(
             optimizer=RMSprop(lr=learning_rate),
             # Define separate losses for policy logits and value estimate.
@@ -149,8 +144,8 @@ class A2CSolver(StandardAgent):
                 self.report_step(step, episode, max_episodes)
 
                 if dones[step]:
-                    # TODO should append to scores not just the last one - missing lots
-                    last_ep_steps = success_steps
+                    # OR env_wrapper.get_score(state, state_next, reward, step)
+                    self.scores.append(success_steps)
                     success_steps = 0
                     ep_rewards.append(0.)
                     next_obs = env.reset()
@@ -165,10 +160,6 @@ class A2CSolver(StandardAgent):
                 [actions[:, None], advs[:, None]], axis=-1)
             loss_value = self.model.train_on_batch(
                 observations, [acts_and_advs, returns])
-
-            score = last_ep_steps
-            # OR env_wrapper.get_score(state, state_next, reward, step)
-            self.scores.append(score)
 
             solved = self.handle_episode_end(
                 env_wrapper, observations[-1], next_obs, rewards[step], 

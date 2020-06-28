@@ -1,72 +1,115 @@
 # https://github.com/ajleite/basic-ppo/blob/master/ppo.py
 
 import os
-import env
 import sys
-import gym
-import importlib
+import copy
 import random
 import itertools
 import pprint
 import datetime
 import numpy as np
 import tensorflow as tf
+import tensorflow_probability as tfp
 
+from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input, Dense
 from tensorflow.keras.optimizers import Adam
 
 from collections import deque
 from models.standard_agent import StandardAgent
 
-from utils import conditional_decorator
+from utils import conditional_decorator, EnvTracker
 
 
-# TODO - use it
-class EnvTracker():
-    """
-    A class that can preserve a half-run environment
-    Recreates the env then saves some left-over information
-    """
+class PPOModel(tf.keras.Model):
 
-    def __init__(self, env_wrapper):
+    def __init__(self, input_shape, num_actions, model_name='mlp_policy'):
 
-        class_name = env_wrapper.__class__.__name__
-        callable_class = getattr(env, class_name)
-        if hasattr(env_wrapper, "kwargs"):
-            self.env_wrapper = callable_class(env_wrapper.kwargs)
-        else:
-            self.env_wrapper = callable_class()
+        super(PPOModel, self).__init__(model_name)
+        self.num_actions = num_actions
 
-        self.env = self.env_wrapper.env
-        self.latest_state = self.env.reset()
-        self.return_so_far = 0.
-        self.steps_so_far = 0
+        # VALUE
+        self.L_v1 = Dense(24, activation='tanh', 
+            input_shape=(None, input_shape))
+        self.L_v2 = Dense(48, activation='tanh')
+        self.L_vout = Dense(1, name='value')
+
+        # PI
+        self.L_p1 = Dense(24, activation='tanh',
+            input_shape=(None, input_shape))
+        self.L_p2 = Dense(48, activation='tanh')
+        self.L_pout = Dense(self.num_actions, name='policy_logits')
+
+    def call(self, inputs, **kwargs):
+        # Inputs is a numpy array, convert to a tensor.
+        x = tf.convert_to_tensor(inputs)
+
+        value = self.L_v1(x)
+        value = self.L_v2(value)
+        value = self.L_vout(value)
+
+        policy_logits = self.L_p1(x)
+        policy_logits = self.L_p2(policy_logits)
+        policy_logits = self.L_pout(policy_logits)
+
+        return policy_logits, value
+
+    def act_value_logprobs(self, state, eps=None, test=False):
+        if eps is not None:
+            raise NotImplementedError("Need to implement epsilon-randomness")
+
+        state = tf.cast(
+            tf.expand_dims(state, axis=0), 
+            dtype=tf.dtypes.float64
+        )
+
+        logits, value = self.predict_on_batch(state)
+        prob_dist = tfp.distributions.Categorical(probs=tf.nn.softmax(logits))
+
+        action = (
+            tf.math.argmax(logits, axis=-1) if test
+            else prob_dist.sample()  # TODO put some eps random in, too
+        )
+
+        log_probs = prob_dist.log_prob(action)
+
+        return action, value, log_probs
+
+    def evaluate_actions(self, state, action):
+
+        logits, value = self.predict_on_batch(state)
+        prob_dist = tfp.distributions.Categorical(probs=tf.nn.softmax(logits))
+
+        log_probs = prob_dist.log_prob(action)
+        entropy = prob_dist.entropy()
+
+        return log_probs, entropy, value
 
 
-# TODO change it all to PPO
+# TODO why so slow?
 class PPOSolver(StandardAgent):
     """
     PPO Solver
     Inspired by:
-      https://github.com/ajleite/basic-ppo/blob/master/ppo.py
       https://github.com/anita-hu/TF2-RL/blob/master/PPO/TF2_PPO.py
+      https://github.com/ajleite/basic-ppo/blob/master/ppo.py
     """
 
     can_graph = True
 
-    # TODO make env wrapper self state for all agents
     def __init__(self, 
         experiment_name,
         state_size,
         action_size,
-        epsilon=0.2,
+        clip_ratio=0.2,
+        val_coef=1.0,
+        entropy_coef=0.01,
+        lam=1.0,
         gamma=0.95,
         actors=1,
         cycle_length=128,
-        # batch_size=64,
         minibatch_size_per_actor=64,
         cycle_epochs=4,
-        # num_random_action_selection=4096,
         learning_rate=5e-4,
         model_name="ppo",
         saving=True):
@@ -75,8 +118,11 @@ class PPOSolver(StandardAgent):
         self.state_size = state_size
         self.action_size = action_size
 
-        self.epsilon = epsilon
+        self.clip_ratio = clip_ratio
         self.gamma = gamma
+        self.lam = lam
+        self.val_coef = val_coef
+        self.entropy_coef = entropy_coef
 
         self.actors = actors
         self.cycle_length = cycle_length  # Run this many per epoch
@@ -89,14 +135,9 @@ class PPOSolver(StandardAgent):
 
         self.solved_on = None
 
-        self.pi_model = self.build_model(
-            model_name=self.model_name + "_pi")
-        self.pi_model_old = self.build_model(
-            model_name=self.model_name + "_old_pi")
-        self.value_model = self.build_model(
-            output_size=1,  # map to single value
-            model_name=self.model_name + "_value"
-        )
+        self.model = PPOModel(
+            self.state_size, self.action_size, model_name=self.model_name)
+        self.model.build(input_shape=(None, self.state_size))
 
         # self._random_dataset = self._gather_rollouts(
         #     env_wrapper, num_init_random_rollouts, epsilon=1.)
@@ -106,26 +147,9 @@ class PPOSolver(StandardAgent):
         super(PPOSolver, self).__init__(
             self.model_name + "_" + experiment_name, 
             saving=saving)
+        head, _, _ = self.model_location.rpartition(".h5")
+        self.model_location = head + ".weights"
         self.load_state()
-    
-    """
-    def _gather_rollouts(self, env_wrapper, num_rollouts, epsilon=None, render=False):
-        env = env_wrapper.env
-        state = env.reset()
-        memory = deque(maxlen=self.max_rollout_len)
-        for _ in range(num_rollouts):
-            done = False
-            for t in itertools.count():
-                if render:
-                    env.render()
-                action = self.act(self.model, state, epsilon=epsilon)
-                next_state, reward, done, _ = env.step(action)
-                memory.append((state, action, next_state, reward, done))
-                state = next_state
-                if done or len(memory) >= self.max_rollout_length:
-                    break
-        return memory
-    """
 
     def show(self, env_wrapper):
         raise NotImplementedError("self.model needs to be adapted in super")
@@ -140,16 +164,23 @@ class PPOSolver(StandardAgent):
         all_episode_steps = []
 
         for iteration in range(max_iters):
-            memory = []
+            data = []
 
             for env_tracker in env_trackers:
                 state = env_tracker.latest_state
+                states, actions, log_probs, rewards, v_preds =\
+                    [], [], [], [], []
 
                 for step in range(self.cycle_length):
                     if render:
                         env_tracker.env.render()
 
-                    action = self.act(self.pi_model, state, epsilon=None)
+                    action, value, log_prob = (
+                        tf.squeeze(x).numpy() for x in
+                        self.model.act_value_logprobs(
+                            state, 
+                            eps=None)
+                    )
                     observation, reward, done, _ = env_tracker.env.step(action)
                     state_next = observation
 
@@ -159,10 +190,11 @@ class PPOSolver(StandardAgent):
 
                     env_tracker.return_so_far += reward
 
-                    memory.append(
-                        (state, np.int32(action), np.float64(reward), 
-                         state_next, done)
-                    )
+                    states.append(state)
+                    actions.append(action)
+                    log_probs.append(log_prob)
+                    rewards.append(np.float64(reward))
+                    v_preds.append(value)
 
                     self.report_step(step, iteration, max_iters)
                     if done:
@@ -176,6 +208,20 @@ class PPOSolver(StandardAgent):
                         env_tracker.steps_so_far += 1
                         state = observation
 
+                next_v_preds = v_preds[1:] + [0.]  # TODO - both right float?
+                gaes = self.get_norm_general_advantage_est(
+                    rewards, v_preds, next_v_preds)
+
+                # TODO make a handler object
+                if not data:
+                    data = [
+                        states, actions, log_probs, next_v_preds, rewards, 
+                        gaes
+                    ]
+                else:
+                    data[0] += states; data[1] += actions; data[2] += log_probs
+                    data[3] += next_v_preds; data[4] += rewards; data[5] += gaes
+
                 env_tracker.latest_state = state
 
             self.scores = all_episode_steps  # FIXME this won't handle picking up from left-off
@@ -186,78 +232,94 @@ class PPOSolver(StandardAgent):
                 break
 
             self.take_training_step(
-                *tuple(map(tf.convert_to_tensor, zip(*memory)))
+                *(tf.convert_to_tensor(lst) for lst in data)
+                # *tuple(map(tf.convert_to_tensor, zip(*memory)))
             )
         self.elapsed_time += (datetime.datetime.now() - start_time)
         return solved
 
+    def get_norm_general_advantage_est(self, rewards, v_preds, next_v_preds):
+        # Sources:
+        #  https://github.com/uidilr/ppo_tf/blob/master/ppo.py#L98
+        #  https://github.com/anita-hu/TF2-RL/blob/master/PPO/TF2_PPO.py
+        deltas = [
+            r_t + self.gamma * v_next - v for r_t, v_next, v in 
+            zip(rewards, next_v_preds, v_preds)
+        ]
+        gaes = copy.deepcopy(deltas)
+        for t in reversed(range(len(gaes) - 1)):
+            gaes[t] = gaes[t] + self.lam * self.gamma * gaes[t + 1]
+
+        gaes = np.array(gaes).astype(np.float64)
+        norm_gaes = (gaes - gaes.mean()) / gaes.std()
+
+        return norm_gaes
+
     @conditional_decorator(tf.function, can_graph)
-    def take_training_step(self, sts, a, r, n_sts, d):
+    def take_training_step(self, sts, a, log_p, nxt_v_pred, r, adv):
         """
         Performs gradient DEscent on minibatches of minibatch_size, 
         sampled from a batch of batch_size, sampled from the memory
+
+        Samples without replacement (to check)
         """
+
+        assert self.batch_size == len(r)
 
         for _ in range(self.cycle_epochs):
             # Batch from the examples in the memory
-            shuffled_indices = tf.random.shuffle(tf.range(self.batch_size))
+            shuffled_indices = tf.random.shuffle(tf.range(self.batch_size))  # Every index of the cycle examples
             num_mb = self.batch_size // self.minibatch_size
             # Pick minibatch-sized samples from there
             for minibatch_i in tf.split(shuffled_indices, num_mb):
                 minibatch = (
-                    tf.gather(x, minibatch_i) for x in (sts, a, r, n_sts, d)
+                    tf.gather(x, minibatch_i, axis=0) 
+                    for x in (sts, a, log_p, nxt_v_pred, r, adv)
                 )
                 self.train_minibatch(*minibatch)
 
         # TODO used to be zip weights and assign
-        for pi_old_w, pi_w in zip(
-                self.pi_model_old.weights, self.pi_model.weights):
-            pi_old_w.assign(pi_w)
+        # for pi_old_w, pi_w in zip(
+        #         self.pi_model_old.weights, self.pi_model.weights):
+        #     pi_old_w.assign(pi_w)
     
     @conditional_decorator(tf.function, can_graph)
-    def train_minibatch(self, sts, a, r, n_sts, d):
+    def train_minibatch(self, sts, a, log_p, nxt_v_pred, r, adv):
+       
+        # Convert from (64,) to (64, 1)
+        r = tf.expand_dims(r, axis=-1)
+        nxt_v_pred = tf.expand_dims(nxt_v_pred, axis=-1)
 
-        next_value = tf.stop_gradient(
-            tf.where(
-                d, 
-                tf.zeros(d.shape, dtype=tf.float64),
-                self.value_model(n_sts)
+        with tf.GradientTape() as tape:
+            new_log_p, entropy, sts_vals = self.model.evaluate_actions(sts, a)
+            ratios = tf.exp(new_log_p - log_p)
+
+            clipped_ratios = tf.clip_by_value(
+                ratios, 
+                clip_value_min=1-self.clip_ratio, 
+                clip_value_max=1+self.clip_ratio
             )
-        )
-        advantage = r + self.gamma * next_value - self.value_model(sts)
-
-        # Update value model
-        value_loss = tf.reduce_sum(advantage ** 2)
-        value_gradient = tf.gradients(value_loss, self.value_model.weights)
-        self.optimizer.apply_gradients(
-            zip(value_gradient, self.value_model.weights))
-        
-        # Update policy model
-        ratio = (
-            tf.gather(self.pi_model(sts), a, axis=1) 
-            / tf.gather(self.pi_model_old(sts), a, axis=1)
-        )
-        confident_ratio = tf.clip_by_value(
-            ratio, 1 - self.epsilon, 1 + self.epsilon)
-
-        # apply a filter (trust region?) above and below epsilon
-        current_objective = ratio * advantage  # weight
-        confident_objective = confident_ratio * advantage
-
-        ppo_objective = tf.reduce_mean(
-            tf.where(
-                current_objective < confident_objective,
-                current_objective,
-                confident_objective
+            loss_clip = tf.reduce_mean(
+                tf.minimum((adv  * ratios), (adv * clipped_ratios))
             )
-        )
+            target_values = r + self.gamma * nxt_v_pred
 
-        pi_gradient = tf.gradients(-ppo_objective, self.pi_model.weights)
+            vf_loss = tf.reduce_mean(
+                tf.math.square(sts_vals - target_values)
+            )
 
-        self.optimizer.apply_gradients(
-            zip(pi_gradient, self.pi_model.weights))
+            entropy = tf.reduce_mean(entropy)
 
-    def save_state(self):
+            total_loss = ( 
+                - loss_clip 
+                + self.val_coef * vf_loss 
+                - self.entropy_coef * entropy
+            )
+        train_variables = self.model.trainable_variables
+        grads = tape.gradient(total_loss, train_variables)
+        self.optimizer.apply_gradients(zip(grads, train_variables))
+
+    def save_state(self, verbose=False):
         """
         Called at the end of saving-episodes.
 
@@ -267,14 +329,17 @@ class PPOSolver(StandardAgent):
         """
 
         add_to_save = {
-            "epsilon": self.epsilon,
+            # "epsilon": self.epsilon,
             # "memory": self.memory,
             "optimizer_config": self.optimizer.get_config(),
             }
 
         self.save_state_to_dict(append_dict=add_to_save)
 
-        self.pi_model.save(self.model_location)
+        if verbose:
+            print("Saving to", self.model_location)
+
+        self.model.save_weights(self.model_location) # , save_format='tf')
 
     def load_state(self):
         """Load a model with the specified name"""
@@ -283,7 +348,7 @@ class PPOSolver(StandardAgent):
 
         print("Loading weights from", self.model_location + "...", end="")
         if os.path.exists(self.model_location):
-            self.model = tf.keras.models.load_model(self.model_location)
+            self.model.load_weights(self.model_location)
             self.optimizer = self.optimizer.from_config(self.optimizer_config)
             del model_dict["optimizer_config"], self.optimizer_config
             print(" Loaded.")

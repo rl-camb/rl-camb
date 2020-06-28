@@ -1,5 +1,7 @@
 import sys
 import argparse
+import env
+import tensorflow as tf
 
 class MyParser(argparse.ArgumentParser):
     
@@ -28,3 +30,31 @@ def conditional_decorator(dec, condition):
             return func
         return dec(func)
     return decorator
+
+
+class EnvTracker():
+    """
+    A class that can preserve a half-run environment
+    Recreates the env then saves some left-over information
+    """
+
+    def __init__(self, env_wrapper):
+
+        class_name = env_wrapper.__class__.__name__
+        callable_class = getattr(env, class_name)
+        if hasattr(env_wrapper, "kwargs"):
+            self.env_wrapper = callable_class(env_wrapper.kwargs)
+        else:
+            self.env_wrapper = callable_class()
+
+        self.env = self.env_wrapper.env
+        self.latest_state = self.env.reset()
+        self.return_so_far = 0.
+        self.steps_so_far = 0
+
+
+class ProbabilityDistribution(tf.keras.Model):
+    def call(self, logits, **kwargs):
+        return tf.squeeze(
+            tf.random.categorical(logits, 1),
+            axis=-1)
