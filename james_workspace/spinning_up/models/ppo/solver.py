@@ -86,7 +86,6 @@ class PPOModel(tf.keras.Model):
         return log_probs, entropy, value
 
 
-# TODO why so slow?
 class PPOSolver(StandardAgent):
     """
     PPO Solver
