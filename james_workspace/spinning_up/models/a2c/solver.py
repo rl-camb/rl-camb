@@ -74,6 +74,7 @@ class A2CSolver(StandardAgent):
         ent_coef=1e-4,
         vf_coef=0.5,
         batch_size=64,
+        n_cycles=128,
         max_grad_norm=0.5,
         learning_rate=7e-4,
         gamma=0.99,
@@ -84,6 +85,7 @@ class A2CSolver(StandardAgent):
         self.state_size = state_size
         self.action_size = action_size
         self.batch_size = batch_size
+        self.n_cycles = n_cycles
 
         self.gamma = gamma
         self.ent_coef = ent_coef
@@ -110,21 +112,21 @@ class A2CSolver(StandardAgent):
         
         self.load_state()
 
-    def solve(self, env_wrapper, max_episodes, verbose=False, render=False):
+    def solve(self, env_wrapper, max_iters, verbose=False, render=False):
         start_time = datetime.datetime.now()
         env = env_wrapper.env
 
         # TODO - make it a memory deque or so
-        actions = np.empty((self.batch_size,), dtype=np.int32)
-        rewards, dones, values = np.empty((3, self.batch_size))
-        observations = np.empty((self.batch_size,) + (self.state_size,))
+        actions = np.empty((self.n_cycles,), dtype=np.int32)
+        rewards, dones, values = np.empty((3, self.n_cycles))
+        observations = np.empty((self.n_cycles,) + (self.state_size,))
 
         next_obs = env.reset()
         ep_rewards = [0.0]
         success_steps = 0
 
-        for episode in range(max_episodes):
-            for step in range(self.batch_size):  # itertools.count():
+        for iteration in range(max_iters):
+            for step in range(self.n_cycles):  # itertools.count():
                 if render:
                     env.render()
                 
@@ -141,7 +143,7 @@ class A2CSolver(StandardAgent):
 
                 ep_rewards[-1] += rewards[step]
 
-                self.report_step(step, episode, max_episodes)
+                self.report_step(step, iteration, max_iters)
 
                 if dones[step]:
                     # OR env_wrapper.get_score(state, state_next, reward, step)
@@ -163,7 +165,7 @@ class A2CSolver(StandardAgent):
 
             solved = self.handle_episode_end(
                 env_wrapper, observations[-1], next_obs, rewards[step], 
-                step, max_episodes, verbose=verbose)
+                step, max_iters, verbose=verbose)
 
             if solved:
                 break

@@ -27,6 +27,7 @@ class DQNSolver(StandardAgent):
         memory_len=100000,
         gamma=0.99,
         batch_size=64,
+        n_cycles=128,
         epsilon=1.,
         epsilon_min=0.01,
         epsilon_decay=0.995, 
@@ -42,6 +43,7 @@ class DQNSolver(StandardAgent):
         self.epsilon_min = epsilon_min
         self.epsilon_decay = epsilon_decay # 0.995
         self.batch_size = batch_size
+        self.n_cycles = n_cycles
         self.model_name = model_name
 
         self.memory = deque(maxlen=memory_len)
@@ -58,16 +60,14 @@ class DQNSolver(StandardAgent):
             saving=saving)
         self.load_state()
 
-    # TODO - can this be built into standard agent? Compare with vpg solver
-    # Probably just need to rewrite a run-episode method
-    def solve(self, env_wrapper, max_episodes, verbose=False, render=False):
+    def solve(self, env_wrapper, max_iters, verbose=False, render=False):
         start_time = datetime.datetime.now()
         env = env_wrapper.env
+        state = env.reset()
+        success_steps = 0
         
-        for episode in range(max_episodes):
-            state = env.reset()
-
-            for step in itertools.count():
+        for iteration in range(max_iters):
+            for step in range(self.n_cycles):
                 if render:
                     env.render()
 
@@ -83,19 +83,22 @@ class DQNSolver(StandardAgent):
                     (state, np.int32(action), reward, state_next, done))
                 state = observation
 
-                self.report_step(step, episode, max_episodes)
+                self.report_step(step, iteration, max_iters)
                 if done:
-                    break
+                    state = env.reset()
+                    # OR env_wrapper.get_score(state, state_next, reward, step)
+                    self.scores.append(success_steps)
+                    success_steps = 0
+                else:
+                    success_steps += 1
 
             self.learn()
 
             score = step 
-            # OR env_wrapper.get_score(state, state_next, reward, step)
-            self.scores.append(step)
 
             solved = self.handle_episode_end(
                 env_wrapper, state, state_next, reward, 
-                step, max_episodes, verbose=verbose)
+                step, max_iters, verbose=verbose)
 
             if solved:
                 break
@@ -118,7 +121,7 @@ class DQNSolver(StandardAgent):
 
         loss_value = self.take_training_step(
             *tuple(map(tf.convert_to_tensor, zip(*minibatch)))
-            )
+        )
 
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay

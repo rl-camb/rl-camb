@@ -34,6 +34,7 @@ class VPGSolver(StandardAgent):
         epsilon_decay_rate=0.995,
         epsilon_min=0.1,
         batch_size=64,
+        n_cycles=128,
         learning_rate=0.01,
         model_name="vpg", 
         saving=True):
@@ -48,6 +49,7 @@ class VPGSolver(StandardAgent):
         
         self.label = "Batch"  # not by episode, by arbitrary batch
         self.batch_size = batch_size
+        self.n_cycles = n_cycles
         self.min_batch_size = batch_size
 
         self.memory = []  # state
@@ -84,13 +86,14 @@ class VPGSolver(StandardAgent):
     def solve(self, env_wrapper, max_iters, verbose=False, render=False):
         start_time = datetime.datetime.now()
         env = env_wrapper.env
-        
+        state, done, episode_rewards = env.reset(), False, []
+        success_steps = 0
+
         for batch_num in range(max_iters):
-            state, done, episode_rewards = env.reset(), False, []
             
             state_batch, act_batch, batch_future_rewards = [], [], []
 
-            for step in itertools.count():
+            for step in range(self.n_cycles):
                 if render:
                     env.render()
 
@@ -114,11 +117,17 @@ class VPGSolver(StandardAgent):
                     batch_future_rewards += list(
                         self.discount_future_cumsum(
                             episode_rewards, self.gamma))
-                    if not len(state_batch) > self.min_batch_size:
-                        # Get some more experience, clean episode
-                        state, done, episode_rewards = env.reset(), False, []
-                    else:
-                        break
+                    state, done, episode_rewards = env.reset(), False, []
+                    self.scores.append(success_steps)
+                    success_steps = 0
+                else:
+                    success_steps +=1
+            
+            batch_future_rewards += list(
+                self.discount_future_cumsum(
+                episode_rewards, self.gamma)
+            )
+            episode_rewards = []
 
             # HANDLE END OF EPISODE
             batch_advs = np.array(batch_future_rewards)
@@ -128,9 +137,6 @@ class VPGSolver(StandardAgent):
 
             self.remember(state_batch, act_batch, normalised_batch_advs)
             self.learn(*self.get_batch_to_train())
-
-            score = len(episode_rewards)  # E.g. steps in last episode
-            self.scores.append(score)
 
             solved = self.handle_episode_end(
                 env_wrapper, state, state_next, reward, 
@@ -148,7 +154,18 @@ class VPGSolver(StandardAgent):
 
     def get_batch_to_train(self):
 
-        return map(tf.convert_to_tensor, self.memory)
+        assert len(self.memory[0]) == len(self.memory[1]), f"{len(self.memory[0])}, {len(self.memory[1])}"
+        assert len(self.memory[1]) == len(self.memory[2]), f"{len(self.memory[1])}, {len(self.memory[2])}"
+
+        minibatch_i = np.random.choice(len(self.memory[0]),
+            min(self.batch_size, len(self.memory[0])),
+            )
+        
+        sampled_memory = []
+        for i in range(len(self.memory)):
+            sampled_memory.append(tf.convert_to_tensor([self.memory[i][j] for j in minibatch_i]))
+
+        return sampled_memory
     
     def learn(self, sts, acts, advs):
         """Updated the agent's decision network based
@@ -267,7 +284,7 @@ class VPGSolverWithMemory(VPGSolver):
         minibatch_i = np.random.choice(
             len(self.memory),
             min(self.batch_size, len(self.memory)),
-            )
+        )
         minibatch = [self.memory[i] for i in minibatch_i]
         return tuple(map(tf.convert_to_tensor, zip(*minibatch)))
 
