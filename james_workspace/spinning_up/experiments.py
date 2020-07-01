@@ -3,7 +3,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from env import CartPoleStandUp
-from models import DQNSolver, VPGSolver, VPGSolverWithMemory, A2CSolver
+from models import (
+    DQNSolver, VPGSolver, VPGSolverWithMemory, A2CSolver, PPOSolver,
+    DDPGSolver
+)
 from utils import MyParser
 
 
@@ -54,7 +57,7 @@ class RepeatExperiment():
                 self.exp_dict_file)
 
         for r in range(repeats):
-            print(f"\nRepeat {r + 1} / {repeats}")
+            print(f"---\nRepeat {r + 1} / {repeats}\n")
 
             agent = agent_init()
 
@@ -227,10 +230,12 @@ if __name__ == "__main__":
 
     # Iterate over
     agents = {
-        #"dqn": DQNSolver,
-        #"vpg": VPGSolver,
-        #"vpg_batch": VPGSolverWithMemory,
+        "dqn": DQNSolver,
+        "vpg": VPGSolver,
+        "vpg_batch": VPGSolverWithMemory,
         "a2c": A2CSolver,
+        "ppo": PPOSolver,
+        "ddpg": DDPGSolver,
     }
 
     for i, agent_name in enumerate(agents):
@@ -245,7 +250,8 @@ if __name__ == "__main__":
             experiment.experiment_dir, 
             cart.observation_space, 
             cart.action_space, 
-            saving=False)
+            saving=False
+        )
 
         experiment.repeat_experiment(
             cart,

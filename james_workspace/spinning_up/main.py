@@ -1,6 +1,8 @@
 from env import CartPoleStandUp
 from models import (
-    DQNSolver, VPGSolver, VPGSolverWithMemory, A2CSolver, PPOSolver)
+    DQNSolver, VPGSolver, VPGSolverWithMemory, A2CSolver, PPOSolver,
+    DDPGSolver
+)
 
 from utils.plotting import plot_scores
 from utils import smooth_over, MyParser
@@ -10,33 +12,36 @@ def parse_args():
 
     parser = MyParser()
     
-    parser.add_argument("--outdir", type=str, required=True,
-                        help="If supplied, model "
-                        "checkpoints will be saved so "
-                        "training can be restarted later",
-                        default=None)
+    parser.add_argument(
+        "--outdir", type=str, required=True, default=None,
+        help="If supplied, model checkpoints will be saved so "
+             "training can be restarted later")
 
-    parser.add_argument("--train", dest="train", 
-                        type=int, default=0, 
-                        help="number of episodes to train")
+    parser.add_argument(
+        "--train", dest="train", type=int, default=0, 
+        help="number of episodes to train")
 
-    parser.add_argument("--show", action="store_true", 
-                        help="Shows a gif of the agent acting under "
-                             "its current set of parameters")
+    parser.add_argument(
+        "--show", action="store_true", 
+        help="Shows a gif of the agent acting under its current set of "
+             "parameters")
 
-    parser.add_argument("--example", action="store_true", 
-                        help="Shows an example gif of the environment"
-                             "with random actions")
+    parser.add_argument(
+        "--example", action="store_true", 
+        help="Shows an example gif of the environment with random actions")
     
-    parser.add_argument("--render", action="store_true", 
-                        help="Whether to render the env as we go")
+    parser.add_argument(
+        "--render", action="store_true", 
+        help="Whether to render the env as we go")
 
-    parser.add_argument("--plot", action="store_true", 
-                        help="Whether to plot the experiment output")
+    parser.add_argument(
+        "--plot", action="store_true", 
+        help="Whether to plot the experiment output")
 
-    parser.add_argument("--model", type=str,
-                        choices=['vpg', 'vpg_batch', 'dqn', 'a2c', 'ppo'],
-                        help="The model to be run.")
+    parser.add_argument(
+        "--model", type=str, 
+        choices=['vpg', 'vpg_batch', 'dqn', 'a2c', 'ppo', 'ddpg'],
+        help="The model to be run.")
 
     return parser.parse_args()
 
@@ -44,21 +49,19 @@ def parse_args():
 def get_model(model_arg, args_dict):
 
     std_args = (args.outdir, cart.observation_space, cart.action_space)
+
+    arg_agent = {
+        'dqn': DQNSolver,
+        'vpg': VPGSolver,
+        'vpg_batch': VPGSolverWithMemory,
+        'a2c': A2CSolver,
+        'ppo': PPOSolver,
+        'ddpg': DDPGSolver,
+    }
+
     model_arg = model_arg.lower()
-    if model_arg == 'dqn':
-        agent = DQNSolver(
-            *std_args, **args_dict)
-    elif model_arg == 'vpg':
-        agent = VPGSolver(
-            *std_args, **args_dict)
-    elif model_arg == 'vpg_batch':
-        agent = VPGSolverWithMemory(
-            *std_args, **args_dict)
-    elif model_arg == "a2c":
-        agent = A2CSolver(
-            *std_args, **args_dict)
-    elif model_arg == "ppo":
-        agent = PPOSolver(
+    if model_arg in arg_agent:
+        agent = arg_agent[model_arg](
             *std_args, **args_dict)
     else:
         raise ValueError("Need to specify a model in valid choices.")
