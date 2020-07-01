@@ -240,7 +240,7 @@ if __name__ == "__main__":
 
     for i, agent_name in enumerate(agents):
 
-        print(f"\nAgent {agent_name}, ({i+1}/{len(agents)})")
+        print(f"---\nAgent {agent_name}, ({i+1}/{len(agents)})")
 
         # Initialise the experiment
         experiment.initialise_experiment(agent_name)

@@ -70,6 +70,8 @@ class CartPoleStandUp(CustomCartPole):
         """The task is solved if the average score over the last self.episodes_threshold 
         episodes averaged to be over the score threshold.
         """
+        if len(scores) < 2:
+            return False, 0
         solved = False
         if len(scores) < self.episodes_threshold:
             up_to = len(scores)
