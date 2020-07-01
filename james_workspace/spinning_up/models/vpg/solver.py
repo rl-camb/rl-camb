@@ -123,6 +123,7 @@ class VPGSolver(StandardAgent):
                 else:
                     success_steps +=1
             
+            # Add any trailing rewards to done
             batch_future_rewards += list(
                 self.discount_future_cumsum(
                 episode_rewards, self.gamma)
