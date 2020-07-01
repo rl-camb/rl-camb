@@ -92,7 +92,7 @@ class DQNSolver(StandardAgent):
                 else:
                     success_steps += 1
 
-            self.learn()
+                self.learn()
 
             score = step 
 
@@ -112,6 +112,8 @@ class DQNSolver(StandardAgent):
         on a sample of previous decisions it has seen.
         Here, we combine the target and action networks.
         """
+        if len(self.memory) < self.batch_size:
+            return
         
         minibatch_i = np.random.choice(len(self.memory),
             min(self.batch_size, len(self.memory)),
