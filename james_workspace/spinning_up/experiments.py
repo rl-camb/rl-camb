@@ -228,7 +228,7 @@ if __name__ == "__main__":
     
     # MAKE YOUR EXPERIMENT
 
-    # Iterate over
+    # Configs to iterate over
     agents = {
         "dqn": DQNSolver,
         "vpg": VPGSolver,
@@ -237,15 +237,14 @@ if __name__ == "__main__":
         "ppo": PPOSolver,
         "ddpg": DDPGSolver,
     }
-
+    
+    # Iterate over the configs
     for i, agent_name in enumerate(agents):
-
-        print(f"---\nAgent {agent_name}, ({i+1}/{len(agents)})")
-
         # Initialise the experiment
+        print(f"---\nAgent {agent_name}, ({i+1}/{len(agents)})")
         experiment.initialise_experiment(agent_name)
 
-        # Set the agent to be run
+        # Set the agent to be run (using config params)
         agent_init = lambda : agents[agent_name](
             experiment.experiment_dir, 
             cart.observation_space, 
@@ -257,6 +256,7 @@ if __name__ == "__main__":
             cart,
             agent_init,
             repeats=args.repeat)
+
         print("\nComplete\n")
 
     if args.compare is not None:

@@ -22,8 +22,6 @@ from utils import ProbabilityDistribution
 tf.keras.backend.set_floatx('float64')
 
 
-# TODO inherit this from A2C model - it's the same
-# init and solve should be different
 class DDPGSolver(StandardAgent):
     """
     A standard ddpg solver:

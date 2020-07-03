@@ -114,6 +114,10 @@ class VPGSolver(StandardAgent):
                 self.report_step(step, batch_num, max_iters)
 
                 if done:
+
+                    # At the end of each episode:
+                    # Create a list of future rewards, 
+                    #  discounting by how far in the future
                     batch_future_rewards += list(
                         self.discount_future_cumsum(
                             episode_rewards, self.gamma))
@@ -132,7 +136,10 @@ class VPGSolver(StandardAgent):
 
             # HANDLE END OF EPISODE
             batch_advs = np.array(batch_future_rewards)
-            normalised_batch_advs = ( (batch_advs - np.mean(batch_advs))
+
+            # This is R(tau), normalised
+            normalised_batch_advs = ( 
+                (batch_advs - np.mean(batch_advs))
                 / (np.std(batch_advs) + 1e-8)
             )
 
@@ -188,16 +195,23 @@ class VPGSolver(StandardAgent):
         tf.debugging.assert_equal(tf.size(acts), tf.size(advs), summarize=1)
 
         with tf.GradientTape() as tape:
-            logits = self.model(sts)
+            
+            # One step away from Pi_theta(at|st)
+            pi_action_logits = self.model(sts)
+            
             action_one_hots = tf.one_hot(
                 acts, self.action_size_tensor, dtype=tf.float64)
-            log_probs = tf.math.reduce_sum(
-                action_one_hots * tf.nn.log_softmax(logits), 
+            
+            # This IS pi_theta(at|st), only at the actual action taken
+            pi_action_log_probs = tf.math.reduce_sum(
+                action_one_hots * tf.nn.log_softmax(pi_action_logits), 
                 axis=1)
 
-            tf.debugging.assert_equal(tf.size(advs), tf.size(log_probs))
+            tf.debugging.assert_equal(tf.size(advs), tf.size(pi_action_log_probs))
 
-            loss_value = - tf.math.reduce_mean(advs * log_probs)
+            loss_value = - tf.math.reduce_mean(
+                advs * pi_action_log_probs
+            )
 
         grads = tape.gradient(loss_value, self.model.trainable_variables)
 
