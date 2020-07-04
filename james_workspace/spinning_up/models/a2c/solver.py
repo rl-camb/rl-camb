@@ -27,8 +27,11 @@ class A2CModel(tf.keras.Model):
 
         super().__init__(model_name)
 
-        self.hidden1 = tf.keras.layers.Dense(128, activation='relu')
-        self.hidden2 = tf.keras.layers.Dense(128, activation='relu')
+        self.prob_1 = tf.keras.layers.Dense(24, activation='tanh')
+        self.prob_2 = tf.keras.layers.Dense(48, activation='tanh')
+
+        self.val_1 = tf.keras.layers.Dense(24, activation='tanh')
+        self.val_2 = tf.keras.layers.Dense(48, activation='tanh')
 
         # Logits are unnormalized log probabilities.
         self.logits_layer = tf.keras.layers.Dense(num_actions, name='policy_logits')
@@ -41,11 +44,14 @@ class A2CModel(tf.keras.Model):
         # Inputs is a numpy array, convert to a tensor.
         x = tf.convert_to_tensor(inputs)
         # Separate hidden layers from the same input tensor.
-        hidden_logs = self.hidden1(x)
-        hidden_vals = self.hidden2(x)
+        hidden_logs = self.prob_1(x)
+        hidden_logs = self.prob_2(hidden_logs)
+
+        hidden_vals = self.val_1(x)
+        hidden_vals = self.val_2(hidden_vals)
 
         return (
-            self.logits_layer(hidden_logs), 
+            self.logits_layer(hidden_logs),
             self.value_layer(hidden_vals)
         )
 
