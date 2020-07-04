@@ -98,8 +98,7 @@ class PPOSolver(StandardAgent):
 
     def __init__(self, 
         experiment_name,
-        state_size,
-        action_size,
+        env_wrapper,
         clip_ratio=0.2,
         val_coef=1.0,
         entropy_coef=0.01,
@@ -113,9 +112,11 @@ class PPOSolver(StandardAgent):
         model_name="ppo",
         saving=True):
 
-        # TODO clean up and get from env wrapper
-        self.state_size = state_size
-        self.action_size = action_size
+        super(PPOSolver, self).__init__(
+            env_wrapper,
+            model_name,
+            experiment_name, 
+            saving=saving)
 
         self.clip_ratio = clip_ratio
         self.gamma = gamma
@@ -143,19 +144,16 @@ class PPOSolver(StandardAgent):
 
         self.optimizer = Adam(lr=learning_rate)
 
-        super(PPOSolver, self).__init__(
-            self.model_name + "_" + experiment_name, 
-            saving=saving)
         head, _, _ = self.model_location.rpartition(".h5")
         self.model_location = head + ".weights"
         self.load_state()
 
-    def show(self, env_wrapper):
+    def show(self):
         raise NotImplementedError("self.model needs to be adapted in super")
 
-    def solve(self, env_wrapper, max_iters, verbose=False, render=False):
+    def solve(self, max_iters, verbose=False, render=False):
         start_time = datetime.datetime.now()
-        env_trackers = [EnvTracker(env_wrapper) for _ in range(self.actors)]
+        env_trackers = [EnvTracker(self.env_wrapper) for _ in range(self.actors)]
         solved = False
 
         # Every episode return ever
@@ -184,7 +182,7 @@ class PPOSolver(StandardAgent):
                     state_next = observation
 
                     # Custom reward if required by env wrapper
-                    reward = env_wrapper.reward_on_step(
+                    reward = self.env_wrapper.reward_on_step(
                         state, state_next, reward, done, step)
 
                     env_tracker.return_so_far += reward
@@ -225,7 +223,7 @@ class PPOSolver(StandardAgent):
 
             self.scores = all_episode_steps  # FIXME this won't handle picking up from left-off
             solved = self.handle_episode_end(
-                env_wrapper, state, state_next, reward, 
+                state, state_next, reward, 
                 step, max_iters, verbose=verbose)
             if solved: 
                 break

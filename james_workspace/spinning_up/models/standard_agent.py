@@ -11,7 +11,14 @@ from tensorflow.keras.layers import Dense
 
 class StandardAgent():
 
-    def __init__(self, experiment_dir, saving=True):
+    def __init__(self, env_wrapper, model_name, experiment_name, saving=True):
+
+        self.env_wrapper = env_wrapper
+        self.state_size = env_wrapper.observation_space
+        self.action_size = env_wrapper.action_space
+
+        self.model_name = model_name 
+        experiment_dir = "_".join((model_name, experiment_name))
 
         self.experiment_dir = (
             "saved_models" + os.sep + experiment_dir + os.sep)
@@ -47,8 +54,8 @@ class StandardAgent():
 
         return model
 
-    def show(self, env_wrapper, show_episodes=1, verbose=True, render=True):
-        env = env_wrapper.env
+    def show(self, show_episodes=1, verbose=True, render=True):
+        env = self.env_wrapper.env
         for episode in range(show_episodes):
             state = env.reset()
             # Take steps until failure / win
@@ -59,7 +66,7 @@ class StandardAgent():
                 observation, reward, done, _ = env.step(action)
                 state_next = observation
                 # Custom reward if required by env wrapper
-                reward = env_wrapper.reward_on_step(
+                reward = self.env_wrapper.reward_on_step(
                     state, state_next, reward, done, step)
                 state = observation
                 
@@ -71,11 +78,11 @@ class StandardAgent():
                     break
 
             # Calculate a (optionally custom) score for this episode
-            score = env_wrapper.get_score(state, state_next, reward, step)
+            score = self.env_wrapper.get_score(state, state_next, reward, step)
 
             print(f"\rEpisode {episode + 1}/{show_episodes} "
                   f"- steps {step} - score {score}/"
-                  f"{env_wrapper.score_target}")
+                  f"{self.env_wrapper.score_target}")
 
     def act(self, action_model, state, epsilon=None):
         """
@@ -118,16 +125,16 @@ class StandardAgent():
 
         self.total_t += 1
 
-    def handle_episode_end(self, env_wrapper, state, state_next, 
+    def handle_episode_end(self, state, state_next, 
         reward, step, max_episodes, verbose=False):
 
-        solved, agent_score = env_wrapper.check_solved_on_done(
+        solved, agent_score = self.env_wrapper.check_solved_on_done(
             self.scores, verbose=verbose)
 
         if self.total_episodes % 25 == 0 or solved:
             print(f"\rEpisode {self.total_episodes + 1}/{max_episodes} "
                   f"- steps {step} - score {int(agent_score)}/"
-                  f"{int(env_wrapper.score_target)}")
+                  f"{int(self.env_wrapper.score_target)}")
             if self.saving:
                 self.save_state()
 

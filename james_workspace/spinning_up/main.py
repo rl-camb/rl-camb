@@ -46,9 +46,9 @@ def parse_args():
     return parser.parse_args()
 
 
-def get_model(model_arg, args_dict):
+def get_model(model_name, env, outdir, args_dict):
 
-    std_args = (args.outdir, cart.observation_space, cart.action_space)
+    std_args = (outdir, env)
 
     arg_agent = {
         'dqn': DQNSolver,
@@ -59,10 +59,9 @@ def get_model(model_arg, args_dict):
         'ddpg': DDPGSolver,
     }
 
-    model_arg = model_arg.lower()
-    if model_arg in arg_agent:
-        agent = arg_agent[model_arg](
-            *std_args, **args_dict)
+    model_name = model_name.lower()
+    if model_name in arg_agent:
+        agent = arg_agent[model_name](*std_args, **args_dict)
     else:
         raise ValueError("Need to specify a model in valid choices.")
 
@@ -73,27 +72,30 @@ if __name__ == "__main__":
 
     args = parse_args()
     cart = CartPoleStandUp(
-        score_target=195., episodes_threshold=100, reward_on_fail=-10.)
+        score_target=195.,
+        episodes_threshold=100,
+        reward_on_fail=-10.
+    )
     cart.get_spaces(registry=False)  # just viewing
 
     args_dict = {
         # "epsilon": 1.,
     }
 
-    agent = get_model(args.model, args_dict)
+    agent = get_model(args.model, cart, args.outdir, args_dict)
 
     if args.example:
-        cart.do_random_runs(cart, episodes=1, steps=99, verbose=True)
+        cart.do_random_runs(episodes=1, steps=99, verbose=True)
     
     if args.train:
         solved = agent.solve(
-            cart, args.train, verbose=True, render=args.render)
+            args.train, verbose=True, render=args.render)
         
         print("\nSolved:", solved, "on step", agent.solved_on, 
               "- time elapsed:", agent.elapsed_time)
 
     if args.show:
-        agent.show(cart)
+        agent.show()
 
     if args.plot:
         plot_scores(

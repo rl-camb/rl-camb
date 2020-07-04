@@ -20,10 +20,10 @@ class DQNSolver(StandardAgent):
     Implements a simple DNN that predicts values.
     """
 
-    def __init__(self, 
+    def __init__(
+        self,
         experiment_name,
-        state_size,
-        action_size, 
+        env_wrapper,
         memory_len=100000,
         gamma=0.99,
         batch_size=64,
@@ -33,21 +33,27 @@ class DQNSolver(StandardAgent):
         epsilon_decay=0.995, 
         learning_rate=0.01,
         learning_rate_decay=0.01,
+        rollout_steps=10000,
         model_name="dqn",
         saving=True):
 
-        self.state_size = state_size
-        self.action_size = action_size
+        super(DQNSolver, self).__init__(
+            env_wrapper,
+            model_name,
+            experiment_name,
+            saving=saving)
+
+        # Training
+        self.batch_size = batch_size
+        self.n_cycles = n_cycles
+
+        self.memory = deque(maxlen=memory_len)
+        self.solved_on = None
+
         self.gamma = gamma    # discount rate was 1
         self.epsilon = epsilon  # exploration rate
         self.epsilon_min = epsilon_min
         self.epsilon_decay = epsilon_decay # 0.995
-        self.batch_size = batch_size
-        self.n_cycles = n_cycles
-        self.model_name = model_name
-
-        self.memory = deque(maxlen=memory_len)
-        self.solved_on = None
 
         self.model = self.build_model()
 
@@ -55,14 +61,40 @@ class DQNSolver(StandardAgent):
             lr=learning_rate, 
             decay=learning_rate_decay)
 
-        super(DQNSolver, self).__init__(
-            self.model_name + "_" + experiment_name, 
-            saving=saving)
         self.load_state()
 
-    def solve(self, env_wrapper, max_iters, verbose=False, render=False):
+        self.rollout_memory(rollout_steps - len(self.memory))
+
+    def rollout_memory(self, rollout_steps, verbose=False, render=False):
+        if rollout_steps <= 0:
+            return
+        env = self.env_wrapper.env
+        state = env.reset()
+        for step in range(rollout_steps):
+            if render:
+                env.render()
+
+            action = self.act(self.model, state, epsilon=1.)  # Max random
+            observation, reward, done, _ = env.step(action)
+            state_next = observation
+            
+            # Custom reward if required by env wrapper
+            reward = self.env_wrapper.reward_on_step(
+                state, state_next, reward, done, step)
+
+            self.memory.append(
+                (state, np.int32(action), reward, state_next, done)
+            )
+            state = observation
+
+            if done:
+                state = env.reset()
+                # OR env_wrapper.get_score(state, state_next, reward, step)
+        print(f"Rolled out {len(self.memory)}")
+
+    def solve(self, max_iters, verbose=False, render=False):
         start_time = datetime.datetime.now()
-        env = env_wrapper.env
+        env = self.env_wrapper.env
         state = env.reset()
         success_steps = 0
         
@@ -76,7 +108,7 @@ class DQNSolver(StandardAgent):
                 state_next = observation
                 
                 # Custom reward if required by env wrapper
-                reward = env_wrapper.reward_on_step(
+                reward = self.env_wrapper.reward_on_step(
                     state, state_next, reward, done, step)
 
                 self.memory.append(
@@ -97,7 +129,7 @@ class DQNSolver(StandardAgent):
             score = step 
 
             solved = self.handle_episode_end(
-                env_wrapper, state, state_next, reward, 
+                state, state_next, reward, 
                 step, max_iters, verbose=verbose)
 
             if solved:

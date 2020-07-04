@@ -32,8 +32,7 @@ class DDPGSolver(StandardAgent):
 
     def __init__(self, 
         experiment_name,
-        state_size,
-        action_size, 
+        env_wrapper,
         ent_coef=1e-4,
         vf_coef=0.5,
         n_cycles=128,
@@ -48,6 +47,13 @@ class DDPGSolver(StandardAgent):
         lrschedule='linear',
         model_name="ddpg",
         saving=True,):
+
+        super(DDPGSolver, self).__init__(
+            env_wrapper,
+            model_name,
+            experiment_name,
+            saving=saving
+        )
 
         self.state_size = state_size
         self.action_size = action_size
@@ -90,11 +96,6 @@ class DDPGSolver(StandardAgent):
         self.critic_optimizer = Adam(learning_rate=learning_rate_critic)
         self.critic.summary()
 
-        super(DDPGSolver, self).__init__(
-            model_name + "_" + experiment_name,
-            saving=saving
-        )
-
         self.load_state()
 
     def build_critic_model(self, input_size, action_size, model_name='critic'):
@@ -117,9 +118,9 @@ class DDPGSolver(StandardAgent):
             "Consider implementing from\nhttps://github.com/anita-hu/"
             "TF2-RL/blob/master/DDPG/TF2_DDPG_Basic.py")
 
-    def solve(self, env_wrapper, max_iters, verbose=False, render=False):
+    def solve(self, max_iters, verbose=False, render=False):
         start_time = datetime.datetime.now()
-        env = env_wrapper.env
+        env = self.env_wrapper.env
         state = env.reset()
 
         success_steps = 0
@@ -135,7 +136,7 @@ class DDPGSolver(StandardAgent):
                 observation, reward, done, _ = env.step(np.argmax(action_dist))
                 
                 # Custom reward if required by env wrapper
-                reward = env_wrapper.reward_on_step(
+                reward = self.env_wrapper.reward_on_step(
                     state, observation, reward, done, step)
 
                 self.memory.append(
@@ -158,7 +159,7 @@ class DDPGSolver(StandardAgent):
                 self.take_training_step()
 
             solved = self.handle_episode_end(
-                env_wrapper, state, observation, reward, 
+                state, observation, reward, 
                 step, max_iters, verbose=verbose)
 
             if solved:

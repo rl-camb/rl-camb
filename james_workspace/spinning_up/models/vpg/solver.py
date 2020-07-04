@@ -27,8 +27,7 @@ class VPGSolver(StandardAgent):
 
     def __init__(self, 
         experiment_name, 
-        state_size, 
-        action_size, 
+        env_wrapper,
         gamma=0.99, 
         epsilon=None,
         epsilon_decay_rate=0.995,
@@ -39,30 +38,33 @@ class VPGSolver(StandardAgent):
         model_name="vpg", 
         saving=True):
 
-        self.state_size = state_size
-        self.action_size = action_size
-        self.action_size_tensor = tf.constant(action_size)
+        super(VPGSolver, self).__init__(
+            env_wrapper,
+            model_name,
+            experiment_name,
+            saving=saving)
+
+        self.label = "Batch"  # not by episode, by arbitrary batch
+        self.action_size_tensor = tf.constant(self.action_size)
+        
         self.gamma = gamma
         self.epsilon = epsilon
         self.epsilon_decay_rate = epsilon_decay_rate
         self.epsilon_min = epsilon_min
-        
-        self.label = "Batch"  # not by episode, by arbitrary batch
+
+        # TODO could go to standard..
         self.batch_size = batch_size
         self.n_cycles = n_cycles
-        self.min_batch_size = batch_size
 
         self.memory = []  # state
         self.solved_on = None
 
-        self.model_name = model_name
         self.model = self.build_model()
         self.optimizer = Adam(lr=learning_rate)  # decay=learning_rate_decay)
 
-        super(VPGSolver, self).__init__(
-            self.model_name + "_" + experiment_name, 
-            saving=saving)
         self.load_state()
+
+        # TODO rollout steps
 
     @staticmethod
     def discount_future_cumsum(episode_rewards, gamma):
@@ -83,9 +85,9 @@ class VPGSolver(StandardAgent):
         assert len(discounted_futures) == len(episode_rewards)
         return discounted_futures
 
-    def solve(self, env_wrapper, max_iters, verbose=False, render=False):
+    def solve(self, max_iters, verbose=False, render=False):
         start_time = datetime.datetime.now()
-        env = env_wrapper.env
+        env = self.env_wrapper.env
         state, done, episode_rewards = env.reset(), False, []
         success_steps = 0
 
@@ -101,7 +103,7 @@ class VPGSolver(StandardAgent):
                 state_next, reward, done, _ = env.step(action)
 
                 # Custom reward if required by env wrapper
-                reward = env_wrapper.reward_on_step(
+                reward = self.env_wrapper.reward_on_step(
                     state, state_next, reward, done, step)
                 
                 state_batch.append(state.copy())
@@ -147,7 +149,7 @@ class VPGSolver(StandardAgent):
             self.learn(*self.get_batch_to_train())
 
             solved = self.handle_episode_end(
-                env_wrapper, state, state_next, reward, 
+                state, state_next, reward, 
                 step, max_iters, verbose=verbose)
 
             if solved:
@@ -266,8 +268,7 @@ class VPGSolverWithMemory(VPGSolver):
     
     def __init__(self, 
         experiment_name, 
-        state_size, 
-        action_size, 
+        env_wrapper, 
         memory_len=100000,
         model_name="vpg_batch",
         **kwargs):
@@ -276,15 +277,13 @@ class VPGSolverWithMemory(VPGSolver):
         # Rest of state defaults remain the same
         super().__init__(
             experiment_name, 
-            state_size=state_size, 
-            action_size=action_size,
+            env_wrapper,
             model_name=model_name,
             **kwargs)
     
         # Overwrite parent state
         self.memory = deque(maxlen=memory_len)
         self.label = "Episode"  # Iterates by episode
-        self.min_batch_size = 0  # stop episodes on done no matter what length
 
     def remember(self, state_batch, act_batch, batch_advs):
         """
