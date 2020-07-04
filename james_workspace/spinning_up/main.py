@@ -1,6 +1,6 @@
 from env import CartPoleStandUp
 from models import (
-    DQNSolver, VPGSolver, VPGSolverWithMemory, A2CSolver, PPOSolver,
+    DQNSolver, VPGSolver, A2CSolver, PPOSolver,
     DDPGSolver
 )
 
@@ -40,7 +40,7 @@ def parse_args():
 
     parser.add_argument(
         "--model", type=str, 
-        choices=['vpg', 'vpg_batch', 'dqn', 'a2c', 'ppo', 'ddpg'],
+        choices=['vpg', 'dqn', 'a2c', 'ppo', 'ddpg'],
         help="The model to be run.")
 
     return parser.parse_args()
@@ -53,7 +53,6 @@ def get_model(model_name, env, outdir, args_dict):
     arg_agent = {
         'dqn': DQNSolver,
         'vpg': VPGSolver,
-        'vpg_batch': VPGSolverWithMemory,
         'a2c': A2CSolver,
         'ppo': PPOSolver,
         'ddpg': DDPGSolver,

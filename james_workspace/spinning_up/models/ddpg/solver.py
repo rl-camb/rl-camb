@@ -294,3 +294,5 @@ class DDPGSolver(StandardAgent):
 
         print("Loaded state:")
         pprint.pprint(model_dict, depth=1)
+
+# TODO rollout some memory_len

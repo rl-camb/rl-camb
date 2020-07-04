@@ -20,7 +20,6 @@ from utils import ProbabilityDistribution
 tf.keras.backend.set_floatx('float64')
 
 
-# TODO try the same model as the other tasks (or make those bigger too)
 class A2CModel(tf.keras.Model):
 
     def __init__(self, input_shape, num_actions, model_name='mlp_policy'):
@@ -251,3 +250,6 @@ class A2CSolver(StandardAgent):
 
         print("Loaded state:")
         pprint.pprint(model_dict, depth=1)
+
+
+# TODO make a batched learning version (create a standard wrapper that inherits whichever?)

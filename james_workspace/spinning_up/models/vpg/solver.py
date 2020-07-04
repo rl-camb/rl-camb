@@ -23,7 +23,7 @@ class VPGSolver(StandardAgent):
         will need to examine steps (total_t), not episodes, as VPG doesn't
         implement episodes per-training-step
     """
-    can_graph = False  # batch size is variable, cannot use tf graphing
+    can_graph = True  # batch size is variable, cannot use tf graphing
 
     def __init__(self, 
         experiment_name, 
@@ -175,6 +175,8 @@ class VPGSolver(StandardAgent):
         for i in range(len(self.memory)):
             sampled_memory.append(tf.convert_to_tensor([self.memory[i][j] for j in minibatch_i]))
 
+        self.memory = []  # Only learning from last set of trajectories
+
         return sampled_memory
     
     def learn(self, sts, acts, advs):
@@ -257,60 +259,3 @@ class VPGSolver(StandardAgent):
 
         print("Loaded state:")
         pprint.pprint(model_dict, depth=1)
-
-
-class VPGSolverWithMemory(VPGSolver):
-    """
-    A VPG solver that implements batch learning from a memory, for more 
-    stable training (pending test).
-    """
-    can_graph = True  # batch size is fixed, can use tf graphing
-    
-    def __init__(self, 
-        experiment_name, 
-        env_wrapper, 
-        memory_len=100000,
-        model_name="vpg_batch",
-        **kwargs):
-        
-
-        # Rest of state defaults remain the same
-        super().__init__(
-            experiment_name, 
-            env_wrapper,
-            model_name=model_name,
-            **kwargs)
-    
-        # Overwrite parent state
-        self.memory = deque(maxlen=memory_len)
-        self.label = "Episode"  # Iterates by episode
-
-    def remember(self, state_batch, act_batch, batch_advs):
-        """
-        Save each step as a tuple of values.
-        """
-        self.memory.extend(tuple(zip(state_batch, act_batch, batch_advs)))
-
-    def get_batch_to_train(self):
-        """
-        Sample a random self.batch_size-sized minibatch from self.memory
-        """
-        minibatch_i = np.random.choice(
-            len(self.memory),
-            min(self.batch_size, len(self.memory)),
-        )
-        minibatch = [self.memory[i] for i in minibatch_i]
-        return tuple(map(tf.convert_to_tensor, zip(*minibatch)))
-
-    def save_state(self, add_to_save={}):
-        """Save a (trained) model with its weights to a specified file.
-        Metadata should be passed to keep information avaialble.
-        """
-
-        self.save_state_to_dict(append_dict={
-            "optimizer_config": self.optimizer.get_config(),
-            "memory": self.memory,
-            "epislon": self.epsilon
-        })
-
-        self.model.save(self.model_location)
