@@ -46,7 +46,8 @@ class DDPGSolver(StandardAgent):
         tau=0.125,
         lrschedule='linear',
         model_name="ddpg",
-        saving=True,):
+        saving=True,
+        rollout_steps=5000,):
 
         super(DDPGSolver, self).__init__(
             env_wrapper,
@@ -96,6 +97,8 @@ class DDPGSolver(StandardAgent):
 
         self.load_state()
 
+        self.rollout_memory(rollout_steps - len(self.memory))
+
     def build_critic_model(self, input_size, action_size, model_name='critic'):
         """
         Returns Q(st+1 | a, s)
@@ -126,7 +129,6 @@ class DDPGSolver(StandardAgent):
 
         success_steps = 0
 
-        # TODO - n cycles
         for iteration in range(max_iters):
             for step in range(self.n_cycles):  # itertools.count():
                 if render:
@@ -156,7 +158,6 @@ class DDPGSolver(StandardAgent):
                 else:
                     success_steps += 1
 
-                # TODO understand why every step unlike others
                 self.take_training_step()
 
             solved = self.handle_episode_end(
@@ -169,11 +170,12 @@ class DDPGSolver(StandardAgent):
         self.elapsed_time += (datetime.datetime.now() - start_time)
         return solved
 
+    # @tf.function()
     def take_training_step(self):
         if len(self.memory) < self.batch_size:
             return
 
-        # TODO min is actually unecessary with cond above
+        # Note min is actually unecessary with cond above
         minibatch_i = np.random.choice(
             len(self.memory),
             min(self.batch_size, len(self.memory)),
@@ -255,6 +257,7 @@ class DDPGSolver(StandardAgent):
         """
 
         add_to_save = {
+            "memory": self.memory,
             "epsilon": self.epsilon,
             "actor_optimizer_config": self.actor_optimizer.get_config(),
             "critic_optimizer_config": self.critic_optimizer.get_config(),
@@ -296,4 +299,37 @@ class DDPGSolver(StandardAgent):
         print("Loaded state:")
         pprint.pprint(model_dict, depth=1)
 
-# TODO rollout some memory_len
+    def rollout_memory(self, rollout_steps, render=False):
+        if rollout_steps <= 0:
+            return
+        print("Rolling out steps", rollout_steps)
+        env = self.env_wrapper.env
+        state = env.reset()
+
+        max_iters = rollout_steps // self.n_cycles
+
+        for iteration in range(max_iters):
+            for step in range(self.n_cycles):
+                if render:
+                    env.render()
+
+                # TODO implement act and add noise
+                action_dist = self.actor(tf.expand_dims(state, axis=0))
+                observation, reward, done, _ = env.step(np.argmax(action_dist))
+                
+                # Custom reward if required by env wrapper
+                reward = self.env_wrapper.reward_on_step(
+                    state, observation, reward, done, step)
+
+                self.memory.append(
+                    (state, tf.squeeze(action_dist), np.float64(reward), 
+                     observation, done)
+                )
+                state = observation
+
+                self.report_step(step, iteration, max_iters)
+
+                if done:
+                    state = env.reset()
+
+        print("\nCompleted.")

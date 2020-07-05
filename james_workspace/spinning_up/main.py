@@ -74,7 +74,7 @@ if __name__ == "__main__":
     cart = CartPoleStandUp(
         score_target=195.,
         episodes_threshold=100,
-        reward_on_fail=-10.
+        reward_on_fail=-10.,
     )
     cart.get_spaces(registry=False)  # just viewing
 

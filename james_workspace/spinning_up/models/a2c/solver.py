@@ -127,9 +127,9 @@ class A2CSolver(StandardAgent):
         actions = np.empty((self.n_cycles,), dtype=np.int32)
         rewards, dones, values = np.empty((3, self.n_cycles))
         observations = np.empty((self.n_cycles,) + (self.state_size,))
+        ep_rewards = [0.0]
 
         next_obs = env.reset()
-        ep_rewards = [0.0]
         success_steps = 0
 
         for iteration in range(max_iters):
@@ -288,7 +288,8 @@ class A2CSolverBatch(A2CSolver):
         lrschedule='linear',
         model_name="a2c_batch",
         saving=True,
-        maxlen=10000):
+        maxlen=10000,
+        rollout_steps=5000,):
 
         super(A2CSolverBatch, self).__init__(
             experiment_name,
@@ -305,6 +306,7 @@ class A2CSolverBatch(A2CSolver):
             saving=saving,
             )
         self.memory = deque(maxlen=maxlen)
+        self.rollout_memory(rollout_steps - len(self.memory))
 
     def remember(self, obs, acts_advs, rets):
 
@@ -326,3 +328,56 @@ class A2CSolverBatch(A2CSolver):
                 "memory": self.memory
             }
         )
+
+    # TODO way to add random actions to A2C? Need the value too..
+    def rollout_memory(self, rollout_steps, render=False):
+
+        if rollout_steps <= 0:
+            return
+
+        env = self.env_wrapper.env
+        next_obs = env.reset()
+        print("Rolling out further steps", rollout_steps)
+
+        actions = np.empty((self.n_cycles,), dtype=np.int32)
+        rewards, dones, values = np.empty((3, self.n_cycles))
+        observations = np.empty((self.n_cycles,) + (self.state_size,))
+        ep_rewards = [0.0]
+
+        iters = rollout_steps // self.n_cycles
+        for iteration in range(iters):
+            for step in range(self.n_cycles):
+                if render:
+                    env.render()
+
+                actions[step], values[step] =\
+                    self.model.action_value(next_obs[None, :])
+                
+                next_obs, reward, dones[step], _ = env.step(actions[step])
+
+                # Custom reward if required by env wrapper
+                rewards[step] = self.env_wrapper.reward_on_step(
+                    observations[step], next_obs, reward, dones[step], step)
+
+                ep_rewards[-1] += rewards[step]
+
+                self.report_step(step, iteration, iters)
+
+                if dones[step]:
+                    ep_rewards.append(0.)
+                    next_obs = env.reset()
+
+            _, next_value = self.model.action_value(next_obs[None, :])
+
+            returns, advs = self._returns_advantages(
+                rewards, dones, values, next_value)
+
+            acts_and_advs = np.concatenate(
+                [actions[:, None], advs[:, None]], axis=-1)
+
+            self.remember(  # Copy because np array
+                observations.copy(), 
+                acts_and_advs.copy(), 
+                returns.copy()
+            )
+    print("Complete")
