@@ -40,7 +40,7 @@ def parse_args():
 
     parser.add_argument(
         "--model", type=str, 
-        choices=['vpg', 'dqn', 'a2c', 'ppo', 'ddpg'],
+        choices=['vpg', 'dqn', 'a2c', 'ppo', 'ddpg', 'a2c_batch'],
         help="The model to be run.")
 
     return parser.parse_args()
@@ -56,7 +56,7 @@ def get_model(model_name, env, outdir, args_dict):
         'a2c': A2CSolver,
         'ppo': PPOSolver,
         'ddpg': DDPGSolver,
-        'a2c': A2CSolverBatch,
+        'a2c_batch': A2CSolverBatch,
     }
 
     model_name = model_name.lower()

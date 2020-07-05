@@ -124,7 +124,6 @@ class A2CSolver(StandardAgent):
         start_time = datetime.datetime.now()
         env = self.env_wrapper.env
 
-        # TODO - make it a memory deque or so
         actions = np.empty((self.n_cycles,), dtype=np.int32)
         rewards, dones, values = np.empty((3, self.n_cycles))
         observations = np.empty((self.n_cycles,) + (self.state_size,))
@@ -169,7 +168,11 @@ class A2CSolver(StandardAgent):
             acts_and_advs = np.concatenate(
                 [actions[:, None], advs[:, None]], axis=-1)
 
-            self.remember(observations, acts_and_advs, returns)
+            self.remember(  # Copy because np array
+                observations.copy(), 
+                acts_and_advs.copy(), 
+                returns.copy()
+            )
             loss_value = self.model.train_on_batch(
                 *self.get_batch_to_train()
             )
@@ -283,7 +286,7 @@ class A2CSolverBatch(A2CSolver):
         learning_rate=7e-4,
         gamma=0.99,
         lrschedule='linear',
-        model_name="a2c",
+        model_name="a2c_batch",
         saving=True,
         maxlen=10000):
 
