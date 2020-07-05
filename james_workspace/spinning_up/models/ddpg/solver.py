@@ -55,8 +55,6 @@ class DDPGSolver(StandardAgent):
             saving=saving
         )
 
-        self.state_size = state_size
-        self.action_size = action_size
         self.n_cycles = n_cycles
         self.batch_size = batch_size
 
@@ -76,10 +74,10 @@ class DDPGSolver(StandardAgent):
         self.solved_on = None
 
         self.actor = self.build_model(model_name=model_name + "_actor")
-        self.actor.build(input_shape=(None, state_size,))
+        self.actor.build(input_shape=(None, self.state_size,))
         
         self.actor_dash = self.build_model(model_name=model_name + "_actor_target")
-        self.actor_dash.build(input_shape=(None, state_size,))
+        self.actor_dash.build(input_shape=(None, self.state_size,))
         
         self.actor_dash.set_weights(self.actor.get_weights())
         
@@ -117,6 +115,9 @@ class DDPGSolver(StandardAgent):
         raise NotImplementedError(
             "Consider implementing from\nhttps://github.com/anita-hu/"
             "TF2-RL/blob/master/DDPG/TF2_DDPG_Basic.py")
+
+    def show(self, render=False):
+        raise NotImplementedError("self.model needs to be adapted in super")
 
     def solve(self, max_iters, verbose=False, render=False):
         start_time = datetime.datetime.now()

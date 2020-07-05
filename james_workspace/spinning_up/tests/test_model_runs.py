@@ -4,7 +4,14 @@ import unittest
 import pytest
 
 from env import CartPoleStandUp
-from models import DQNSolver, VPGSolver, VPGSolverWithMemory, A2CSolver, PPOSolver
+from models import (
+    DQNSolver, 
+    VPGSolver, 
+    A2CSolver,
+    A2CSolverBatch, 
+    PPOSolver,
+    DDPGSolver,
+)
 
 # agents = (DQNSolver, VPGSolver, VPGSolverWithMemory, A2CSolver PPOSolver)
 
@@ -39,14 +46,6 @@ class TestModelsRun(unittest.TestCase):
         agent = VPGSolver(*self.std_agent_args)
         agent.show(render=False)
 
-    def test_vpg_with_memory_train(self):
-        agent = VPGSolverWithMemory(*self.std_agent_args)
-        agent.solve(1, verbose=True, render=False)
-
-    def test_vpg_with_memory_show(self):
-        agent = VPGSolverWithMemory(*self.std_agent_args)
-        agent.show(render=False)
-
     def test_a2c_train(self):
         agent = A2CSolver(*self.std_agent_args)
         agent.solve(1, verbose=True, render=False)
@@ -54,6 +53,15 @@ class TestModelsRun(unittest.TestCase):
     @pytest.mark.skip(reason="show uses self.model - a2c doesn't have")
     def test_a2c_show(self):
         agent = A2CSolver(*self.std_agent_args)
+        agent.show(render=False)
+
+    def test_a2c_batch_train(self):
+        agent = A2CSolverBatch(*self.std_agent_args)
+        agent.solve(1, verbose=True, render=False)
+
+    @pytest.mark.skip(reason="show uses self.model - a2c doesn't have")
+    def test_a2c_show(self):
+        agent = A2CSolverBatch(*self.std_agent_args)
         agent.show(render=False)
 
     # @pytest.mark.skip(reason="Problem with deepcopy, but hoping to change functionality later")
@@ -64,6 +72,15 @@ class TestModelsRun(unittest.TestCase):
     @pytest.mark.skip(reason="show uses self.model - ppo doesn't have (yet)")
     def test_ppo_show(self):
         agent = PPOSolver(*self.std_agent_args)
+        agent.show(render=False)
+
+    def test_ddpg_train(self):
+        agent = DDPGSolver(*self.std_agent_args)
+        agent.solve(1, verbose=True, render=False)
+
+    @pytest.mark.skip(reason="show uses self.model - a2c doesn't have")
+    def test_ddpg_show(self):
+        agent = DDPGSolver(*self.std_agent_args)
         agent.show(render=False)
 
 

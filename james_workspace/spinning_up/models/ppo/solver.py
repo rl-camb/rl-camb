@@ -148,7 +148,7 @@ class PPOSolver(StandardAgent):
         self.model_location = head + ".weights"
         self.load_state()
 
-    def show(self):
+    def show(self, render=False):
         raise NotImplementedError("self.model needs to be adapted in super")
 
     def solve(self, max_iters, verbose=False, render=False):

@@ -2,6 +2,7 @@ import sys
 import argparse
 import env
 import tensorflow as tf
+import numpy as np
 
 class MyParser(argparse.ArgumentParser):
     
@@ -24,12 +25,27 @@ def smooth_over(list_to_smooth, smooth_last):
                 )
     return smoothed
 
+
 def conditional_decorator(dec, condition):
     def decorator(func):
         if not condition:
             return func
         return dec(func)
     return decorator
+
+
+def get_batch_from_memory(memory, batch_size):
+
+    minibatch_i = np.random.choice(
+        len(memory),
+        min(batch_size, len(memory)),
+    )
+        
+    minibatch = [memory[i] for i in minibatch_i]
+
+    args_as_tuple = tuple(map(tf.convert_to_tensor, zip(*minibatch)))
+
+    return args_as_tuple
 
 
 class EnvTracker():

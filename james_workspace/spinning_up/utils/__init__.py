@@ -3,5 +3,6 @@ from .utils import (
     MyParser,
     conditional_decorator,
     ProbabilityDistribution,
-    EnvTracker
+    EnvTracker,
+    get_batch_from_memory,
 )

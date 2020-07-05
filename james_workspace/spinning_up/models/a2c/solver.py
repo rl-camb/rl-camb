@@ -15,7 +15,7 @@ from tensorflow.keras.optimizers import RMSprop
 from collections import deque
 from models.standard_agent import StandardAgent
 
-from utils import ProbabilityDistribution
+from utils import ProbabilityDistribution, get_batch_from_memory
 
 tf.keras.backend.set_floatx('float64')
 
@@ -106,10 +106,13 @@ class A2CSolver(StandardAgent):
         # self.epsilon = epsilon  # exploration rate
 
         self.solved_on = None
+        self.memory = []
+
+        self.optimizer = RMSprop(lr=learning_rate)
 
         self.model = A2CModel(self.state_size, self.action_size, model_name=model_name)
         self.model.compile(
-            optimizer=RMSprop(lr=learning_rate),
+            optimizer=self.optimizer,
             # Define separate losses for policy logits and value estimate.
             loss=[self._logits_loss, self._value_loss])
         self.model.build((None, self.state_size))
@@ -165,8 +168,11 @@ class A2CSolver(StandardAgent):
                 rewards, dones, values, next_value)
             acts_and_advs = np.concatenate(
                 [actions[:, None], advs[:, None]], axis=-1)
+
+            self.remember(observations, acts_and_advs, returns)
             loss_value = self.model.train_on_batch(
-                observations, [acts_and_advs, returns])
+                *self.get_batch_to_train()
+            )
 
             solved = self.handle_episode_end(
                 observations[-1], next_obs, rewards[step], 
@@ -177,6 +183,16 @@ class A2CSolver(StandardAgent):
 
         self.elapsed_time += (datetime.datetime.now() - start_time)
         return solved
+
+    def remember(self, obs, acts_advs, rets):
+
+        self.memory = [obs, [acts_advs, rets]]
+
+    def get_batch_to_train(self):
+
+        mem = self.memory
+        self.memory = []
+        return mem
 
     def _returns_advantages(self, rewards, dones, values, next_value):
 
@@ -213,7 +229,7 @@ class A2CSolver(StandardAgent):
         # Here signs are flipped because the optimizer minimizes.
         return policy_loss - self.ent_coef * entropy_loss
 
-    def save_state(self):
+    def save_state(self, add_args={}):
         """
         Called at the end of saving-episodes.
 
@@ -224,10 +240,10 @@ class A2CSolver(StandardAgent):
 
         add_to_save = {
             # "epsilon": self.epsilon,
-            # "optimizer": self.optimizer.get_config(),
+            "optimizer_config": self.optimizer.get_config(),
             }
 
-        self.save_state_to_dict(append_dict=add_to_save)
+        self.save_state_to_dict(append_dict={**add_args, **add_to_save})
 
         self.model.save_weights(self.model_location)
 
@@ -239,8 +255,8 @@ class A2CSolver(StandardAgent):
         print("Loading weights from", self.model_location + "...", end="")
         if os.path.exists(self.model_location):
             self.model.load_weights(self.model_location)
-            # self.optimizer = self.optimizer.from_config(self.optimizer_config)
-            # del model_dict["optimizer_config"], self.optimizer_config
+            self.optimizer = self.optimizer.from_config(self.optimizer_config)
+            del model_dict["optimizer_config"], self.optimizer_config
             print(" Loaded.")
         else:
             print(" Model not yet saved at loaction.")
@@ -253,3 +269,57 @@ class A2CSolver(StandardAgent):
 
 
 # TODO make a batched learning version (create a standard wrapper that inherits whichever?)
+class A2CSolverBatch(A2CSolver):
+
+    def __init__(
+        self,
+        experiment_name,
+        env_wrapper,
+        ent_coef=1e-4,
+        vf_coef=0.5,
+        batch_size=64,
+        n_cycles=128,
+        max_grad_norm=0.5,
+        learning_rate=7e-4,
+        gamma=0.99,
+        lrschedule='linear',
+        model_name="a2c",
+        saving=True,
+        maxlen=10000):
+
+        super(A2CSolverBatch, self).__init__(
+            experiment_name,
+            env_wrapper,
+            ent_coef=ent_coef,
+            vf_coef=vf_coef,
+            batch_size=batch_size,
+            n_cycles=n_cycles,
+            max_grad_norm=max_grad_norm,
+            learning_rate=learning_rate,
+            gamma=gamma,
+            lrschedule=lrschedule,
+            model_name=model_name,
+            saving=saving,
+            )
+        self.memory = deque(maxlen=maxlen)
+
+    def remember(self, obs, acts_advs, rets):
+
+        assert len(obs) == len(acts_advs) and len(obs) == len(rets)
+        for i in range(len(obs)):
+            self.memory.append((obs[i], acts_advs[i], rets[i]))
+
+    def get_batch_to_train(self):
+
+        obs, acts_advs, rets =\
+            get_batch_from_memory(self.memory, self.batch_size)
+
+        return obs, [acts_advs, rets]
+
+    def save_state(self):
+
+        super().save_state(
+            add_args = {
+                "memory": self.memory
+            }
+        )

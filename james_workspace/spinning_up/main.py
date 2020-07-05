@@ -1,7 +1,7 @@
 from env import CartPoleStandUp
 from models import (
     DQNSolver, VPGSolver, A2CSolver, PPOSolver,
-    DDPGSolver
+    DDPGSolver, A2CSolverBatch
 )
 
 from utils.plotting import plot_scores
@@ -56,6 +56,7 @@ def get_model(model_name, env, outdir, args_dict):
         'a2c': A2CSolver,
         'ppo': PPOSolver,
         'ddpg': DDPGSolver,
+        'a2c': A2CSolverBatch,
     }
 
     model_name = model_name.lower()

@@ -11,6 +11,7 @@ from tensorflow.keras.optimizers import Adam
 
 from collections import deque
 from models.standard_agent import StandardAgent
+from utils import get_batch_from_memory
 
 
 class DQNSolver(StandardAgent):
@@ -146,16 +147,10 @@ class DQNSolver(StandardAgent):
         """
         if len(self.memory) < self.batch_size:
             return
-        
-        minibatch_i = np.random.choice(len(self.memory),
-            min(self.batch_size, len(self.memory)),
-            )
-        
-        minibatch = [self.memory[i] for i in minibatch_i]
 
-        loss_value = self.take_training_step(
-            *tuple(map(tf.convert_to_tensor, zip(*minibatch)))
-        )
+        args_as_tuple = get_batch_from_memory(self.memory, self.batch_size)
+
+        loss_value = self.take_training_step(*args_as_tuple)
 
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
