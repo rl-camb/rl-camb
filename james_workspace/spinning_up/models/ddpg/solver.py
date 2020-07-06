@@ -190,10 +190,10 @@ class DDPGSolver(StandardAgent):
 
         # Update weights
         for model_name in ("actor", "critic"):
-            target_model = getattr(self, model_name + "_dash")
             model = getattr(self, model_name)
-            target_weights = target_model.weights
             weights = model.weights
+            target_model = getattr(self, model_name + "_dash")
+            target_weights = target_model.weights
             for i in range(len(target_weights)):
                 target_weights[i] = (
                     weights[i] * self.tau 
