@@ -307,6 +307,8 @@ class A2CSolverBatch(A2CSolver):
             )
         self.memory = deque(maxlen=maxlen)
         self.rollout_memory(rollout_steps - len(self.memory))
+        if self.saving:
+            self.save_state()
 
     def remember(self, obs, acts_advs, rets):
 
@@ -325,7 +327,7 @@ class A2CSolverBatch(A2CSolver):
 
         super().save_state(
             add_args = {
-                "memory": self.memory
+                "memory": self.memory,
             }
         )
 
@@ -380,4 +382,4 @@ class A2CSolverBatch(A2CSolver):
                 acts_and_advs.copy(), 
                 returns.copy()
             )
-    print("Complete")
+        print("Complete")
