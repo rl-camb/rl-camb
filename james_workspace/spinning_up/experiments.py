@@ -4,8 +4,8 @@ import numpy as np
 
 from env import CartPoleStandUp
 from models import (
-    DQNSolver, VPGSolver, VPGSolverWithMemory, A2CSolver, PPOSolver,
-    DDPGSolver
+    DQNSolver, VPGSolver, A2CSolver, PPOSolver,
+    DDPGSolver, A2CSolverBatch
 )
 from utils import MyParser
 
@@ -48,7 +48,7 @@ class RepeatExperiment():
                   f"experiment. Set to {self.max_episodes} "
                   f"(specified {self.max_episodes}")
 
-    def repeat_experiment(self, env_wrapper, agent_init, repeats=1):
+    def repeat_experiment(self, agent_init, repeats=1):
         """
         Repeat training for a given agent and save the results 
         in a reusable format"""
@@ -62,7 +62,7 @@ class RepeatExperiment():
             agent = agent_init()
 
             solved = agent.solve(
-                env_wrapper, self.max_episodes,
+                self.max_episodes,
                 verbose=True, render=self.render)
 
             print("\nSolved:", solved, " after", agent.solved_on, 
@@ -232,8 +232,8 @@ if __name__ == "__main__":
     agents = {
         "dqn": DQNSolver,
         "vpg": VPGSolver,
-        "vpg_batch": VPGSolverWithMemory,
         "a2c": A2CSolver,
+        "a2c_batch": A2CSolverBatch,
         "ppo": PPOSolver,
         "ddpg": DDPGSolver,
     }
@@ -247,15 +247,14 @@ if __name__ == "__main__":
         # Set the agent to be run (using config params)
         agent_init = lambda : agents[agent_name](
             experiment.experiment_dir, 
-            cart.observation_space, 
-            cart.action_space, 
+            cart,
             saving=False
         )
 
         experiment.repeat_experiment(
-            cart,
-            agent_init,
-            repeats=args.repeat)
+            agent_init,  # With env packed in already
+            repeats=args.repeat
+        )
 
         print("\nComplete\n")
 
