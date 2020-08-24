@@ -170,7 +170,6 @@ class DDPGSolver(StandardAgent):
         self.elapsed_time += (datetime.datetime.now() - start_time)
         return solved
 
-    # @tf.function()
     def take_training_step(self):
         if len(self.memory) < self.batch_size:
             return
@@ -189,17 +188,9 @@ class DDPGSolver(StandardAgent):
         )
 
         # Update weights
-        for model_name in ("actor", "critic"):
-            model = getattr(self, model_name)
-            weights = model.weights
-            target_model = getattr(self, model_name + "_dash")
-            target_weights = target_model.weights
-            for i in range(len(target_weights)):
-                target_weights[i] = (
-                    weights[i] * self.tau 
-                    + target_weights[i] * (1. - self.tau)
-                )
-            target_model.set_weights(target_weights)
+        for model_name in "actor", "critic": 
+            self.update_weights(model_name, self.tau)
+        
         # TODO decrease epsilon if not None
 
     @tf.function()
@@ -246,6 +237,15 @@ class DDPGSolver(StandardAgent):
         self.actor_optimizer.apply_gradients(
             zip(actor_grad, self.actor.trainable_variables)
         )
+
+    def update_weights(self, model_name, tau):
+        weights = getattr(getattr(self, model_name), "weights")
+        target_model = getattr(self, model_name + "_dash")
+        target_weights = target_model.weights
+        target_model.set_weights([
+            weights[i] * tau + target_weights[i] * (1. - tau) 
+            for i in range(len(weights))
+        ])
 
     def save_state(self):
         """

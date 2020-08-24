@@ -161,7 +161,7 @@ class PPOSolver(StandardAgent):
         all_episode_steps = []
 
         for iteration in range(max_iters):
-            data = []
+            data = []  # Refresh every batch (on-policy)
 
             for env_tracker in env_trackers:
                 state = env_tracker.latest_state

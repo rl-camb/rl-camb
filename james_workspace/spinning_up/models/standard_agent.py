@@ -118,7 +118,7 @@ class StandardAgent():
     def report_step(self, step, batch, max_batches):
 
         print(
-            f"\rEpisode {batch + 1}/{max_batches} ({self.total_episodes}) "
+            f"\rIter {batch + 1}/{max_batches} ({self.total_episodes}) "
             f"- steps {step} ({self.total_t + 1})",
             end="")
         sys.stdout.flush()

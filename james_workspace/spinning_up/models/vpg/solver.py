@@ -92,7 +92,7 @@ class VPGSolver(StandardAgent):
         success_steps = 0
 
         for batch_num in range(max_iters):
-            
+            # Refresh every batch (on-policy)
             state_batch, act_batch, batch_future_rewards = [], [], []
 
             for step in range(self.n_cycles):
@@ -123,16 +123,16 @@ class VPGSolver(StandardAgent):
                     batch_future_rewards += list(
                         self.discount_future_cumsum(
                             episode_rewards, self.gamma))
-                    state, done, episode_rewards = env.reset(), False, []
                     self.scores.append(success_steps)
+                    state, done, episode_rewards = env.reset(), False, []
                     success_steps = 0
                 else:
-                    success_steps +=1
+                    success_steps += 1
             
             # Add any trailing rewards to done
             batch_future_rewards += list(
                 self.discount_future_cumsum(
-                episode_rewards, self.gamma)
+                    episode_rewards, self.gamma)
             )
             episode_rewards = []
 
